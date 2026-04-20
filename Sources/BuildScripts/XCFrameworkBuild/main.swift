@@ -48,7 +48,7 @@ enum Library: String, CaseIterable {
     var version: String {
         switch self {
         case .libmpv:
-            return "v0.40.0"
+            return "v0.41.0"
         case .FFmpeg:
             return "n8.0"
         case .openssl:
@@ -419,7 +419,7 @@ private class BuildMPV: BaseBuild {
             array.append("-Dgl-cocoa=enabled")
             array.append("-Dvideotoolbox-gl=enabled")
             array.append("-Dvideotoolbox-pl=enabled")
-            array.append("-Dlua=luajit")  // macos show video stats need enable 
+            array.append("-Dlua=disabled")  // disabled to avoid LuaJIT code signing issues in notarized apps
         } else {
             array.append("-Dvideotoolbox-gl=disabled")
             array.append("-Dvideotoolbox-pl=enabled")
@@ -462,8 +462,14 @@ private class BuildFFMPEG: BaseBuild {
         FileManager.default.createFile(atPath: lldbFile.path, contents: nil, attributes: nil)
         let path = directoryURL + "libavcodec/videotoolbox.c"
         if let data = FileManager.default.contents(atPath: path.path), var str = String(data: data, encoding: .utf8) {
-            str = str.replacingOccurrences(of: "kCVPixelBufferOpenGLESCompatibilityKey", with: "kCVPixelBufferMetalCompatibilityKey")
-            str = str.replacingOccurrences(of: "kCVPixelBufferIOSurfaceOpenGLTextureCompatibilityKey", with: "kCVPixelBufferMetalCompatibilityKey")
+            var lines = str.components(separatedBy: .newlines)
+            for (index, line) in lines.enumerated() {
+                if line.contains("kCVPixelBufferIOSurfaceOpenGLTextureCompatibilityKey") {
+                    lines.insert("    CFDictionarySetValue(buffer_attributes, kCVPixelBufferMetalCompatibilityKey, kCFBooleanTrue);", at: index + 2)
+                    break
+                }
+            }
+            str = lines.joined(separator: "\n")
             try? str.write(toFile: path.path, atomically: true, encoding: .utf8)
         }
     }
@@ -695,7 +701,11 @@ private class BuildFFMPEG: BaseBuild {
         "--enable-demuxer=matroska", "--enable-demuxer=mov", "--enable-demuxer=mp3", "--enable-demuxer=mpeg*",
         "--enable-demuxer=ogg", "--enable-demuxer=rm", "--enable-demuxer=rtsp", "--enable-demuxer=rtp",
         "--enable-demuxer=srt", "--enable-demuxer=webvtt",
+        "--enable-demuxer=mxf", "--enable-demuxer=vvc",
         "--enable-demuxer=vc1", "--enable-demuxer=wav", "--enable-demuxer=webm_dash_manifest",
+        // Image/animation formats
+        "--enable-demuxer=gif", "--enable-demuxer=apng", "--enable-demuxer=image2", "--enable-demuxer=image2pipe",
+        "--enable-demuxer=webp_pipe", "--enable-demuxer=gif_pipe", "--enable-demuxer=png_pipe",
         // ./configure --list-bsfs
         "--enable-bsfs",
         // ./configure --list-decoders
@@ -716,6 +726,9 @@ private class BuildFFMPEG: BaseBuild {
         "--enable-decoder=wmv1", "--enable-decoder=wmv2", "--enable-decoder=wmv3",
         "--enable-decoder=vc1", "--enable-decoder=vp6", "--enable-decoder=vp6a", "--enable-decoder=vp6f",
         "--enable-decoder=vp7", "--enable-decoder=vp8", "--enable-decoder=vp9",
+        "--enable-decoder=vvc", "--enable-decoder=apv", "--enable-decoder=dnxhd",
+        // Image/animation formats
+        "--enable-decoder=gif", "--enable-decoder=apng", "--enable-decoder=webp", "--enable-decoder=png",
         // 音频
         "--enable-decoder=aac*", "--enable-decoder=ac3*", "--enable-decoder=adpcm*", "--enable-decoder=alac*",
         "--enable-decoder=amr*", "--enable-decoder=ape", "--enable-decoder=cook",
