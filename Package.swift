@@ -91,38 +91,46 @@ let package = Package(
             ]
         ),
 
-        // Local GPL builds with MXF demuxer, VVC/APV decoders (MPV 0.41), no LuaJIT
+        // GPL builds with MXF demuxer, VVC/APV decoders (MPV 0.41), no LuaJIT
         .binaryTarget(
             name: "Libmpv-GPL",
-            path: "dist/release/xcframework/Libmpv.xcframework"
+            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-0.41.0/Libmpv-GPL.xcframework.zip",
+            checksum: "1386ac6f29a3e5e3b3b2807ba7b6f6a560d0ba238a94a3e66c536800b374231b"
         ),
         .binaryTarget(
             name: "Libavcodec-GPL",
-            path: "dist/release/xcframework/Libavcodec.xcframework"
+            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-0.41.0/Libavcodec-GPL.xcframework.zip",
+            checksum: "eda0284765d3b7e10df9d345a2d2bcdf85a6a53ed1d90a3590ffb75944f80ef4"
         ),
         .binaryTarget(
             name: "Libavdevice-GPL",
-            path: "dist/release/xcframework/Libavdevice.xcframework"
+            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-0.41.0/Libavdevice-GPL.xcframework.zip",
+            checksum: "b087b4f0c85a5976ce20e0b48cb868ae96e83a224d631bbd0ac205351cf5efbf"
         ),
         .binaryTarget(
             name: "Libavformat-GPL",
-            path: "dist/release/xcframework/Libavformat.xcframework"
+            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-0.41.0/Libavformat-GPL.xcframework.zip",
+            checksum: "81ae9dc243cfe2454201c4f6a250dbddf8bbce3ded3436700b1219b88f478937"
         ),
         .binaryTarget(
             name: "Libavfilter-GPL",
-            path: "dist/release/xcframework/Libavfilter.xcframework"
+            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-0.41.0/Libavfilter-GPL.xcframework.zip",
+            checksum: "ca4a1a8ef8657e0c46620e7f64885cb81569a3287add78042c268e421cd61877"
         ),
         .binaryTarget(
             name: "Libavutil-GPL",
-            path: "dist/release/xcframework/Libavutil.xcframework"
+            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-0.41.0/Libavutil-GPL.xcframework.zip",
+            checksum: "a465acbf95ecd79b259028698d46b587d4b2e6e26c8df336d44cbe4a3b2df61c"
         ),
         .binaryTarget(
             name: "Libswresample-GPL",
-            path: "dist/release/xcframework/Libswresample.xcframework"
+            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-0.41.0/Libswresample-GPL.xcframework.zip",
+            checksum: "d616261b26581ffcbfbf0f9bc3fffe0d3756b654f27ffaac8133727034984049"
         ),
         .binaryTarget(
             name: "Libswscale-GPL",
-            path: "dist/release/xcframework/Libswscale.xcframework"
+            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-0.41.0/Libswscale-GPL.xcframework.zip",
+            checksum: "de71f928a2831638daad704be437725591f28f62483bd48ad691e2aa2750e38f"
         ),
         //AUTO_GENERATE_TARGETS_BEGIN//
 
