@@ -1275,6 +1275,9 @@ enum Utility {
         if !environment.keys.contains("PATH") {
             environment["PATH"] = BaseBuild.defaultPath
         }
+        if let developerDir = ProcessInfo.processInfo.environment["DEVELOPER_DIR"] {
+            environment["DEVELOPER_DIR"] = developerDir
+        }
         task.environment = environment
 
         var outputFileHandle: FileHandle?
