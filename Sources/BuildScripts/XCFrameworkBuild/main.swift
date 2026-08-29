@@ -50,7 +50,7 @@ enum Library: String, CaseIterable {
         case .libmpv:
             return "v0.41.0"
         case .FFmpeg:
-            return "n8.1.1"
+            return "n8.1.2"
         case .openssl:
             return "3.3.5"
         case .gnutls:
@@ -60,19 +60,19 @@ enum Library: String, CaseIterable {
         case .gmp:
             return "3.8.11"
         case .libass:
-            return "0.17.4"
+            return "0.17.5"
         case .libunibreak:
-            return "0.17.4"
+            return "0.17.5"
         case .libfreetype:
-            return "0.17.4"
+            return "0.17.5"
         case .libfribidi:
-            return "0.17.4"
+            return "0.17.5"
         case .libharfbuzz:
-            return "0.17.4"
+            return "0.17.5"
         case .libsmbclient:
             return "4.15.13-2512"
         case .libdav1d:    // AV1 decoding
-            return "1.5.2-xcode"
+            return "1.5.3"
         case .lcms2:
             return "2.17.0"
         case .libplacebo:
@@ -80,17 +80,17 @@ enum Library: String, CaseIterable {
         case .libdovi:
             return "3.3.2"
         case .vulkan:
-            return "1.4.1"
+            return "1.4.2"
         case .libshaderc:  // compiling GLSL (OpenGL Shading Language) shaders into SPIR-V (Standard Portable Intermediate Representation - Vulkan) code
             return "2025.5.0"
         case .libuchardet:
-            return "0.0.8-xcode"
+            return "0.0.8"
         case .libbluray:
             return "1.4.0"
         case .libluajit:
-            return "2.1.0-xcode"
+            return "2.1.0-fix"
         case .libuavs3d:
-            return "1.2.1-xcode"
+            return "1.2.1-fix"
         }
     }
 
@@ -425,11 +425,13 @@ private class BuildMPV: BaseBuild {
             array.append("-Dvideotoolbox-pl=enabled")
             array.append("-Dswift-build=disabled")
             array.append("-Daudiounit=enabled")
-            array.append("-Davfoundation=disabled")
+            // Enable the avfoundation AO (AVSampleBufferAudioRenderer) on iOS/tvOS.
+            // CoreAudio HAL (AudioObject*) is macOS-only, so keep coreaudio off.
+            array.append("-Davfoundation=enabled")
+            array.append("-Dcoreaudio=disabled")
             array.append("-Dlua=disabled")
             if platform == .maccatalyst {
                 array.append("-Dcocoa=disabled")
-                array.append("-Dcoreaudio=disabled")
             } else if platform == .xros || platform == .xrsimulator {
                 array.append("-Dios-gl=disabled")
             } else {
@@ -653,7 +655,7 @@ private class BuildFFMPEG: BaseBuild {
         "--disable-armv5te", "--disable-armv6", "--disable-armv6t2",
         "--disable-bzlib", "--disable-gray", "--disable-iconv", "--disable-linux-perf",
         "--disable-shared", "--disable-small", "--disable-symver", "--disable-xlib",
-        "--enable-cross-compile", "--enable-libxml2", "--enable-nonfree",
+        "--enable-cross-compile", "--enable-libxml2",
         "--enable-optimizations", "--enable-pic", "--enable-runtime-cpudetect", "--enable-static", "--enable-thumb", "--enable-version3",
         "--pkg-config-flags=--static",
         // Documentation options:
@@ -900,6 +902,10 @@ private class BuildShaderc: ZipBaseBuild {
 private class BuildVulkan: ZipBaseBuild {
     init() {
         super.init(library: .vulkan)
+    }
+
+    override func frameworks() throws -> [String] {
+        ["MoltenVK"]
     }
 
     override func buildALL() throws {
