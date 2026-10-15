@@ -7,9 +7,9 @@ the frame PTS and track/color metadata. It does not invoke `screenshot-raw` or
 open a second decoder. Native CPU analysis releases mpv's core lock while doing
 the expensive work; the app admits one request at a time.
 
-`Package.swift` remains on the existing released binary URLs and checksums.
-Selecting this branch as a Swift package therefore does not activate the new
-provider. Build and publish a separately qualified candidate before repinning
+`Package.swift` references released binaries, including the separate macOS GPL
+audio-meter release. Selecting this branch as a Swift package does not activate
+the experimental video scope provider. Build and publish a separately qualified candidate before repinning
 an app. No existing release is replaced, and the decoder-raster cache remains
 explicitly default-off.
 
@@ -21,19 +21,18 @@ scope binary. See [audio analysis](../audio-meter/README.md).
 
 ## Existing app compatibility
 
-Aagedal Media Converter currently requires MPVKit revision
-`400202b687841fb394cbf0ef59ad8c6fcfc1275b` in both its project and resolved file.
-Moving MPVKit `main` does not change that exact dependency. This change also
-leaves `Package.swift` byte-identical to that revision, with identical Swift
-wrapper trees and all existing binary URLs/checksums. Consumers choosing the
-new revision still receive the same released binaries. The new source provider
-requires the explicit experimental build option; it is not enabled in normal
-builds. No release assets or Converter files were modified.
+Aagedal Media Converter's existing exact pin
+`400202b687841fb394cbf0ef59ad8c6fcfc1275b` continues to resolve its original
+binaries. Moving MPVKit `main` does not change that pin. The audio-meter release
+updates all eight macOS GPL binary URLs/checksums for consumers explicitly
+selecting the new revision/tag; it does not activate experimental video scopes.
+LGPL/other-platform targets retain their existing artifacts.
 
-See [converter-compatibility.json](evidence-20261015/converter-compatibility.json).
-This is a dependency identity check, not a claim that Converter was rebuilt
-against newly published scope binaries. Publishing and repinning such binaries
-requires separate compatibility qualification.
+The earlier [converter-compatibility.json](evidence-20261015/converter-compatibility.json)
+records the dependency-identity check made before the audio-meter release. Its
+byte-identical manifest statement is historical, not a description of the new
+GPL package manifest. Consumer application rebuild/signing and meter presentation
+are separate from the dependency validation in [audio analysis](../audio-meter/README.md).
 
 ## Build
 

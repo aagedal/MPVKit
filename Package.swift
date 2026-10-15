@@ -94,43 +94,43 @@ let package = Package(
         // GPL builds with MXF demuxer, VVC/APV decoders (MPV 0.41, FFmpeg n8.1.2), no LuaJIT
         .binaryTarget(
             name: "Libmpv-GPL",
-            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.0.0-n8.1.2-coreaudio.2/Libmpv-GPL.xcframework.zip",
-            checksum: "7a362047b0bbe39e9f7001e5b9146cd0651c2eadae38ebcd52f16207b42a4f00"
+            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.0.0-n8.1.2-audio.1/Libmpv-GPL.xcframework.zip",
+            checksum: "6012f2702be48c5eff3e1ced946fa4dcf3d12c323ff04ce5e80b36ad46782b18"
         ),
         .binaryTarget(
             name: "Libavcodec-GPL",
-            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.0.0-n8.1.2/Libavcodec-GPL.xcframework.zip",
-            checksum: "b8bfd580f325995072a78bd9b8ec139781010955a96b09897a4cc202d80d17cf"
+            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.0.0-n8.1.2-audio.1/Libavcodec-GPL.xcframework.zip",
+            checksum: "2ed0fcc6718895eb9058a9230fa5e554f52aceda7168be4125643124005bacdf"
         ),
         .binaryTarget(
             name: "Libavdevice-GPL",
-            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.0.0-n8.1.2/Libavdevice-GPL.xcframework.zip",
-            checksum: "5eeb5485d9f2cf5b63f5d31aa65a06c07eb3b53c2b30ae95edde71af1c055658"
+            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.0.0-n8.1.2-audio.1/Libavdevice-GPL.xcframework.zip",
+            checksum: "3505377a493476eaa4849e74c6e16dde7e38eef7ea77c602dbd60f78b8aae319"
         ),
         .binaryTarget(
             name: "Libavformat-GPL",
-            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.0.0-n8.1.2/Libavformat-GPL.xcframework.zip",
-            checksum: "d8631fe273bb52326bb09e30e4f7dddfb197d656dc8072d7db117c5a618a832a"
+            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.0.0-n8.1.2-audio.1/Libavformat-GPL.xcframework.zip",
+            checksum: "6a8696910339f755f9b4efd1eef03f02d19f7c4d533b1f815d0bd60e6bd39ac6"
         ),
         .binaryTarget(
             name: "Libavfilter-GPL",
-            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.0.0-n8.1.2/Libavfilter-GPL.xcframework.zip",
-            checksum: "7be6453e2146b1c3d99fd52e45d19566e7044bbf335799fc960f53a81e8e0b8f"
+            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.0.0-n8.1.2-audio.1/Libavfilter-GPL.xcframework.zip",
+            checksum: "45b85a2164e3b29f3e91f825c361512841672bbef31e73c13ba740775cb7cf14"
         ),
         .binaryTarget(
             name: "Libavutil-GPL",
-            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.0.0-n8.1.2/Libavutil-GPL.xcframework.zip",
-            checksum: "c86a89424fde74caec2da4e56035050e7bad1e844465ce07b8a2b190d8d41fca"
+            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.0.0-n8.1.2-audio.1/Libavutil-GPL.xcframework.zip",
+            checksum: "bfabacbc89f221025b095e94a39a16f78cc0f1d5a5cb52768818045f98c3d518"
         ),
         .binaryTarget(
             name: "Libswresample-GPL",
-            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.0.0-n8.1.2/Libswresample-GPL.xcframework.zip",
-            checksum: "5f0cf2dcf0c2f83c5ad734def64c042391803211dfda7bd31755adbef565b869"
+            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.0.0-n8.1.2-audio.1/Libswresample-GPL.xcframework.zip",
+            checksum: "97cd5e217f15134c1a7c3dc4966a3ae9ccd1480ba93f407b10605c74d7ceb4df"
         ),
         .binaryTarget(
             name: "Libswscale-GPL",
-            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.0.0-n8.1.2/Libswscale-GPL.xcframework.zip",
-            checksum: "0d1cb7d97b511bc34cbd1c49a3dd350ff3eecda8373265b221b3a20de92f82ff"
+            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.0.0-n8.1.2-audio.1/Libswscale-GPL.xcframework.zip",
+            checksum: "c61d77494e2ae6f4e73319381e35aa9b05f3f98fe44610f427613d8910c5f873"
         ),
         //AUTO_GENERATE_TARGETS_BEGIN//
 
