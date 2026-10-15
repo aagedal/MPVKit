@@ -1,0 +1,5 @@
+NATIVE_SCOPE_MATH_ACCEPTANCE: 120 transfer/orientation/resolution cases, ASan/UBSan
+Native scope source closure applies cleanly.
+Applied native scopes, default-off decoder-raster prerequisite, and retained CoreAudio source fixes.
+Native scope source closure already applied.
+NATIVE_SCOPE_PATCH_ACCEPTANCE: apply/check/idempotence/modified-source rejection passed

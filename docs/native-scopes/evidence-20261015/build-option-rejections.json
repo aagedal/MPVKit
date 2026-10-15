@@ -1,0 +1,27 @@
+[
+  {
+    "arguments": [
+      "enable-native-scopes",
+      "platform=macos"
+    ],
+    "exitCode": 1,
+    "output": "The operation couldn\u2019t be completed. (Native scopes require enable-gpl platform=macos (arm64 development candidate) error 1.)"
+  },
+  {
+    "arguments": [
+      "enable-native-scopes",
+      "enable-gpl",
+      "platform=ios"
+    ],
+    "exitCode": 1,
+    "output": "The operation couldn\u2019t be completed. (Native scopes require enable-gpl platform=macos (arm64 development candidate) error 1.)"
+  },
+  {
+    "arguments": [
+      "enable-native-scopes",
+      "enable-gpl"
+    ],
+    "exitCode": 1,
+    "output": "The operation couldn\u2019t be completed. (Native scopes require enable-gpl platform=macos (arm64 development candidate) error 1.)"
+  }
+]

@@ -1,0 +1,2 @@
+swift build --package-path Sources/BuildScripts --scratch-path /private/tmp/aagedal-mpvkit-scope-recipe-build
+Build complete; arm64 host, Apple Swift 6.4 (swiftlang-6.4.0.34.1).

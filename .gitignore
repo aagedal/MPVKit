@@ -121,3 +121,6 @@ dist/
 Package.resolved
 buildServer.json
 .vscode
+# Python build/validation helpers
+__pycache__/
+*.pyc
