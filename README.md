@@ -129,3 +129,8 @@ If you appreciate my current work, you can buy me a cup of coffee ☕️.
 The opt-in macOS arm64 waveform/parade/vectorscope candidate is documented in
 [docs/native-scopes/README.md](docs/native-scopes/README.md). Released package
 URLs remain unchanged.
+
+## Aagedal macOS audio analysis
+
+The GPL build supports opt-in sample peak/RMS and EBU R128 metadata via libmpv.
+See [audio analysis and validation](docs/audio-meter/README.md).

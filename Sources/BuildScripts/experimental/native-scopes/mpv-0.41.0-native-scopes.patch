@@ -1,8 +1,7 @@
 diff --git a/audio/out/ao_coreaudio.c b/audio/out/ao_coreaudio.c
-index 4b4bf1d..6bbc09e 100644
 --- a/audio/out/ao_coreaudio.c
 +++ b/audio/out/ao_coreaudio.c
-@@ -136,7 +136,7 @@ static int control(struct ao *ao, enum aocontrol cmd, void *arg)
+@@ -136,7 +136,7 @@
      return CONTROL_UNKNOWN;
  }
  
@@ -11,7 +10,7 @@ index 4b4bf1d..6bbc09e 100644
  static void init_physical_format(struct ao *ao);
  static void reinit_latency(struct ao *ao);
  static bool register_hotplug_cb(struct ao *ao);
-@@ -173,18 +173,7 @@ static int init(struct ao *ao)
+@@ -171,18 +171,7 @@
      if (p->change_physical_format)
          init_physical_format(ao);
  
@@ -30,8 +29,8 @@ index 4b4bf1d..6bbc09e 100644
 +    if (!init_audiounit(ao))
          goto coreaudio_error;
  
-     reinit_latency(ao);
-@@ -277,7 +266,7 @@ coreaudio_error:
+     if (!register_hotplug_cb(ao))
+@@ -279,7 +268,7 @@
      talloc_free(tmp);
  }
  
@@ -40,7 +39,7 @@ index 4b4bf1d..6bbc09e 100644
  {
      OSStatus err;
      uint32_t size;
-@@ -306,14 +295,6 @@ static bool init_audiounit(struct ao *ao, AudioStreamBasicDescription asbd, Audi
+@@ -308,14 +297,6 @@
      CHECK_CA_ERROR_L(coreaudio_error_component,
                       "unable to initialize audio unit");
  
@@ -55,7 +54,7 @@ index 4b4bf1d..6bbc09e 100644
      err = AudioUnitSetProperty(p->audio_unit,
                                 kAudioOutputUnitProperty_CurrentDevice,
                                 kAudioUnitScope_Global, 0, &p->device,
-@@ -321,12 +302,36 @@ static bool init_audiounit(struct ao *ao, AudioStreamBasicDescription asbd, Audi
+@@ -323,12 +304,36 @@
      CHECK_CA_ERROR_L(coreaudio_error_audiounit,
                       "can't link audio unit to selected device");
  

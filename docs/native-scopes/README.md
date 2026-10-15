@@ -13,6 +13,12 @@ provider. Build and publish a separately qualified candidate before repinning
 an app. No existing release is replaced, and the decoder-raster cache remains
 explicitly default-off.
 
+The audio-meter build moves the published CoreAudio cleanup fixes into the
+shared patch sequence. This experimental patch is rebased onto that sequence
+and retains the cleanup and hotplug ordering. The historical numerical evidence
+below predates that source-maintenance change; it does not qualify a newly built
+scope binary. See [audio analysis](../audio-meter/README.md).
+
 ## Existing app compatibility
 
 Aagedal Media Converter currently requires MPVKit revision
@@ -44,7 +50,7 @@ and x86_64 are not qualified for this candidate. Default builds do not apply
 the experimental patch. A normal build rejects a cached experimental mpv tree;
 use separate checkouts/build directories for normal and experimental work.
 
-After the three standard MPVKit mpv patches, the build applies
+After the standard MPVKit mpv patches, the build applies
 `Sources/BuildScripts/experimental/native-scopes/mpv-0.41.0-native-scopes.patch`.
 The patch includes:
 
@@ -132,7 +138,7 @@ remain unqualified.
 
 ## Repeat source checks
 
-Using a disposable upstream mpv v0.41.0 checkout, apply the three existing
+Using a disposable upstream mpv v0.41.0 checkout, apply all existing
 `Sources/BuildScripts/patch/libmpv/*.patch` files in sorted order, then run:
 
 ```sh

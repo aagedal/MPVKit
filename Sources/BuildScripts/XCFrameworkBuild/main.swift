@@ -476,7 +476,8 @@ private class BuildFFMPEG: BaseBuild {
         if let data = FileManager.default.contents(atPath: path.path), var str = String(data: data, encoding: .utf8) {
             var lines = str.components(separatedBy: .newlines)
             for (index, line) in lines.enumerated() {
-                if line.contains("kCVPixelBufferIOSurfaceOpenGLTextureCompatibilityKey") {
+                if line.contains("kCVPixelBufferIOSurfaceOpenGLTextureCompatibilityKey"),
+                   !str.contains("CFDictionarySetValue(buffer_attributes, kCVPixelBufferMetalCompatibilityKey, kCFBooleanTrue);") {
                     lines.insert("    CFDictionarySetValue(buffer_attributes, kCVPixelBufferMetalCompatibilityKey, kCFBooleanTrue);", at: index + 2)
                     break
                 }
@@ -758,6 +759,8 @@ private class BuildFFMPEG: BaseBuild {
         "--disable-filters",
         "--enable-filter=aformat", "--enable-filter=amix", "--enable-filter=anull", "--enable-filter=aresample",
         "--enable-filter=areverse", "--enable-filter=asetrate", "--enable-filter=atempo", "--enable-filter=atrim",
+        // Opt-in live metering: sample peaks/RMS, fixed windows and EBU R128 metadata.
+        "--enable-filter=astats", "--enable-filter=asetnsamples", "--enable-filter=ebur128",
         "--enable-filter=bwdif", "--enable-filter=delogo",
         "--enable-filter=equalizer", "--enable-filter=estdif",
         "--enable-filter=firequalizer", "--enable-filter=format", "--enable-filter=fps",

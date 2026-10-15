@@ -1,0 +1,118 @@
+{
+  "tag": "aagedal-1.0.0-n8.1.2-audio.1",
+  "platform": "macos",
+  "minimum_os": "12.0",
+  "filters": [
+    "astats",
+    "asetnsamples",
+    "ebur128"
+  ],
+  "gpl": true,
+  "native_scopes": false,
+  "artifacts": [
+    {
+      "asset": "Libmpv-GPL.xcframework.zip",
+      "sha256": "6012f2702be48c5eff3e1ced946fa4dcf3d12c323ff04ce5e80b36ad46782b18",
+      "bytes": 5808789,
+      "binary_sha256": "7e5cd8dcc981a4be61f582aac2e71f63a7bb2f0a765589796c6c27dd0fc17a37",
+      "architectures": [
+        "x86_64",
+        "arm64"
+      ],
+      "object_minimum_os_versions": [
+        "12.0"
+      ]
+    },
+    {
+      "asset": "Libavcodec-GPL.xcframework.zip",
+      "sha256": "2ed0fcc6718895eb9058a9230fa5e554f52aceda7168be4125643124005bacdf",
+      "bytes": 9863130,
+      "binary_sha256": "faba7286291a4d7d1d29c4383ca58a2bf37fe78bb5bdde3be8e3f773161e0bcb",
+      "architectures": [
+        "x86_64",
+        "arm64"
+      ],
+      "object_minimum_os_versions": [
+        "12.0"
+      ]
+    },
+    {
+      "asset": "Libavdevice-GPL.xcframework.zip",
+      "sha256": "3505377a493476eaa4849e74c6e16dde7e38eef7ea77c602dbd60f78b8aae319",
+      "bytes": 17274,
+      "binary_sha256": "3c755c2be2c2060bb0be1b1b3411d641674556be289cfafddbae563de6d75859",
+      "architectures": [
+        "x86_64",
+        "arm64"
+      ],
+      "object_minimum_os_versions": [
+        "12.0"
+      ]
+    },
+    {
+      "asset": "Libavfilter-GPL.xcframework.zip",
+      "sha256": "45b85a2164e3b29f3e91f825c361512841672bbef31e73c13ba740775cb7cf14",
+      "bytes": 990345,
+      "binary_sha256": "386aa94bf26ac9524695ad2edf80bc283e49b250f8da6c8bc54a6c998e1d8f4d",
+      "architectures": [
+        "x86_64",
+        "arm64"
+      ],
+      "object_minimum_os_versions": [
+        "12.0"
+      ]
+    },
+    {
+      "asset": "Libavformat-GPL.xcframework.zip",
+      "sha256": "6a8696910339f755f9b4efd1eef03f02d19f7c4d533b1f815d0bd60e6bd39ac6",
+      "bytes": 2158180,
+      "binary_sha256": "943d592d845c2791becf7e9d8331be520ac7cbf60b3e19f447a806aee6a89971",
+      "architectures": [
+        "x86_64",
+        "arm64"
+      ],
+      "object_minimum_os_versions": [
+        "12.0"
+      ]
+    },
+    {
+      "asset": "Libavutil-GPL.xcframework.zip",
+      "sha256": "bfabacbc89f221025b095e94a39a16f78cc0f1d5a5cb52768818045f98c3d518",
+      "bytes": 1173014,
+      "binary_sha256": "0434781caa196bc07549193f93924c0ed38bf2ac63b97a1146d33e78024b250a",
+      "architectures": [
+        "x86_64",
+        "arm64"
+      ],
+      "object_minimum_os_versions": [
+        "12.0"
+      ]
+    },
+    {
+      "asset": "Libswresample-GPL.xcframework.zip",
+      "sha256": "97cd5e217f15134c1a7c3dc4966a3ae9ccd1480ba93f407b10605c74d7ceb4df",
+      "bytes": 125087,
+      "binary_sha256": "e8d02c18b48e77065c37d972f17bd8d6e085351c0c6a21b7ac4404ef814e9c7c",
+      "architectures": [
+        "x86_64",
+        "arm64"
+      ],
+      "object_minimum_os_versions": [
+        "12.0"
+      ]
+    },
+    {
+      "asset": "Libswscale-GPL.xcframework.zip",
+      "sha256": "c61d77494e2ae6f4e73319381e35aa9b05f3f98fe44610f427613d8910c5f873",
+      "bytes": 1120947,
+      "binary_sha256": "c114ce37b498bdefdc1145c9e84488385c8827ce9d74d8b2dc67713c610490cd",
+      "architectures": [
+        "x86_64",
+        "arm64"
+      ],
+      "object_minimum_os_versions": [
+        "12.0"
+      ]
+    }
+  ]
+}
