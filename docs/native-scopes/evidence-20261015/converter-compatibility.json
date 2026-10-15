@@ -1,0 +1,17 @@
+{
+  "converterMPVKitRevision": "400202b687841fb394cbf0ef59ad8c6fcfc1275b",
+  "projectRequirement": "exact revision",
+  "resolvedRevisionMatchesProject": true,
+  "Package.swiftSHA256": "a8481f4ab962c3edc835448f2aae9fde9d94be9f669f89c1fb8765e6bdc72056",
+  "manifestByteIdenticalToConverterRevision": true,
+  "unchangedWrapperTrees": {
+    "Sources/_MPVKit": "a29f5ee7f6f012bae5d55ef559d4053522624c06",
+    "Sources/_MPVKit-GPL": "a29f5ee7f6f012bae5d55ef559d4053522624c06",
+    "Sources/_FFmpeg": "a29f5ee7f6f012bae5d55ef559d4053522624c06",
+    "Sources/_FFmpeg-GPL": "a29f5ee7f6f012bae5d55ef559d4053522624c06"
+  },
+  "releaseAssetsModified": false,
+  "converterFilesModified": false,
+  "scopeFeatureDefault": false,
+  "validation": "Static dependency identity check; no Converter rebuild needed because its exact dependency and binary artifacts remain unchanged."
+}

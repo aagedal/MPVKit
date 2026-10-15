@@ -13,6 +13,22 @@ provider. Build and publish a separately qualified candidate before repinning
 an app. No existing release is replaced, and the decoder-raster cache remains
 explicitly default-off.
 
+## Existing app compatibility
+
+Aagedal Media Converter currently requires MPVKit revision
+`400202b687841fb394cbf0ef59ad8c6fcfc1275b` in both its project and resolved file.
+Moving MPVKit `main` does not change that exact dependency. This change also
+leaves `Package.swift` byte-identical to that revision, with identical Swift
+wrapper trees and all existing binary URLs/checksums. Consumers choosing the
+new revision still receive the same released binaries. The new source provider
+requires the explicit experimental build option; it is not enabled in normal
+builds. No release assets or Converter files were modified.
+
+See [converter-compatibility.json](evidence-20261015/converter-compatibility.json).
+This is a dependency identity check, not a claim that Converter was rebuilt
+against newly published scope binaries. Publishing and repinning such binaries
+requires separate compatibility qualification.
+
 ## Build
 
 With the repository's normal build prerequisites installed, use a fresh checkout:
