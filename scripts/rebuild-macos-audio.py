@@ -10,6 +10,7 @@ The library payloads use the normal recipe, with standalone CLI programs omitted
 import argparse
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -35,8 +36,15 @@ def main():
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
     cache, output = args.cache_root.resolve() / 'dist', args.output.resolve()
+    recipe = (root / 'Sources/BuildScripts/XCFrameworkBuild/main.swift').read_text()
+    libraries = []
+    for library in ['FFmpeg', 'libmpv']:
+        match = re.search(r'case \.' + library + r':\s*return "([^"]+)"', recipe)
+        if not match:
+            parser.error(f'Cannot read {library} version from build recipe')
+        libraries.append((library, match[1]))
     revisions = {}
-    for library, version in [('FFmpeg', 'n8.1.2'), ('libmpv', 'v0.41.0')]:
+    for library, version in libraries:
         source = cache / (library + '-' + version)
         revision = git(source, 'rev-parse', 'HEAD')
         if revision != git(source, 'rev-parse', version + '^{commit}'):
@@ -50,7 +58,7 @@ def main():
     for child in cache.iterdir():
         if child.is_dir() and child.name not in ['FFmpeg', 'libmpv', 'release'] and not child.name.startswith(('FFmpeg-', 'libmpv-')):
             (output / 'dist' / child.name).symlink_to(child, target_is_directory=True)
-    for library, version in [('FFmpeg', 'n8.1.2'), ('libmpv', 'v0.41.0')]:
+    for library, version in libraries:
         destination = output / 'dist' / (library + '-' + version)
         export(cache / destination.name, destination)
         for patch in sorted((root / 'Sources/BuildScripts/patch' / library).glob('*.patch')):

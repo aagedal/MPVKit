@@ -91,46 +91,46 @@ let package = Package(
             ]
         ),
 
-        // GPL builds with MXF demuxer, VVC/APV decoders (MPV 0.41, FFmpeg n8.1.2), no LuaJIT
+        // GPL builds with MXF demuxer, VVC/APV decoders (MPV 0.41, FFmpeg n9.0.2), no LuaJIT
         .binaryTarget(
             name: "Libmpv-GPL",
-            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.0.0-n8.1.2-audio.1/Libmpv-GPL.xcframework.zip",
-            checksum: "6012f2702be48c5eff3e1ced946fa4dcf3d12c323ff04ce5e80b36ad46782b18"
+            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.1.0-n9.0.2-audio.1/Libmpv-GPL.xcframework.zip",
+            checksum: "59732502c468d695743c2012878f0433a39fb258cb4e650c41e29514a5385431"
         ),
         .binaryTarget(
             name: "Libavcodec-GPL",
-            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.0.0-n8.1.2-audio.1/Libavcodec-GPL.xcframework.zip",
-            checksum: "2ed0fcc6718895eb9058a9230fa5e554f52aceda7168be4125643124005bacdf"
+            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.1.0-n9.0.2-audio.1/Libavcodec-GPL.xcframework.zip",
+            checksum: "99a3005e484f8674a1c9aa4dac601c78aaae5dd0dd38ebbfc4d34d08789229fe"
         ),
         .binaryTarget(
             name: "Libavdevice-GPL",
-            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.0.0-n8.1.2-audio.1/Libavdevice-GPL.xcframework.zip",
-            checksum: "3505377a493476eaa4849e74c6e16dde7e38eef7ea77c602dbd60f78b8aae319"
+            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.1.0-n9.0.2-audio.1/Libavdevice-GPL.xcframework.zip",
+            checksum: "935865c4ec2df96e79126d213781667dfa3273139ce1cf4c2006dddf6f982244"
         ),
         .binaryTarget(
             name: "Libavformat-GPL",
-            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.0.0-n8.1.2-audio.1/Libavformat-GPL.xcframework.zip",
-            checksum: "6a8696910339f755f9b4efd1eef03f02d19f7c4d533b1f815d0bd60e6bd39ac6"
+            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.1.0-n9.0.2-audio.1/Libavformat-GPL.xcframework.zip",
+            checksum: "a9d42602666ac65110cf305109fd1a43ac82496e4c674d0081d3454b2982ba96"
         ),
         .binaryTarget(
             name: "Libavfilter-GPL",
-            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.0.0-n8.1.2-audio.1/Libavfilter-GPL.xcframework.zip",
-            checksum: "45b85a2164e3b29f3e91f825c361512841672bbef31e73c13ba740775cb7cf14"
+            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.1.0-n9.0.2-audio.1/Libavfilter-GPL.xcframework.zip",
+            checksum: "7e305daf10997b543f2ee38fd14920008e3c320e5a9f24551c1f87f3cca55faf"
         ),
         .binaryTarget(
             name: "Libavutil-GPL",
-            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.0.0-n8.1.2-audio.1/Libavutil-GPL.xcframework.zip",
-            checksum: "bfabacbc89f221025b095e94a39a16f78cc0f1d5a5cb52768818045f98c3d518"
+            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.1.0-n9.0.2-audio.1/Libavutil-GPL.xcframework.zip",
+            checksum: "22f5e30bdedcd2436d3738ad606b60ca4f14a792aad51b3233a91ef00972bbc2"
         ),
         .binaryTarget(
             name: "Libswresample-GPL",
-            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.0.0-n8.1.2-audio.1/Libswresample-GPL.xcframework.zip",
-            checksum: "97cd5e217f15134c1a7c3dc4966a3ae9ccd1480ba93f407b10605c74d7ceb4df"
+            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.1.0-n9.0.2-audio.1/Libswresample-GPL.xcframework.zip",
+            checksum: "be3c9e3c96ff433a54c957e2afdfc14ce90a1ba4ad6a192db160108c19b12243"
         ),
         .binaryTarget(
             name: "Libswscale-GPL",
-            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.0.0-n8.1.2-audio.1/Libswscale-GPL.xcframework.zip",
-            checksum: "c61d77494e2ae6f4e73319381e35aa9b05f3f98fe44610f427613d8910c5f873"
+            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.1.0-n9.0.2-audio.1/Libswscale-GPL.xcframework.zip",
+            checksum: "20d79627f22b93c656efc2428359452c55499f75a33cad0497fd6ee48c240e51"
         ),
         //AUTO_GENERATE_TARGETS_BEGIN//
 
@@ -254,38 +254,38 @@ let package = Package(
 
         .binaryTarget(
             name: "Libavcodec",
-            url: "https://github.com/mpvkit/MPVKit/releases/download/1.0.0/Libavcodec.xcframework.zip",
-            checksum: "136e432919a8a7b5b80155c68e9dc91b0ef3ae6623970b87bb8bd96a452543cf"
+            url: "https://github.com/mpvkit/MPVKit/releases/download/1.1.0-n9.0.2/Libavcodec.xcframework.zip",
+            checksum: "d516e904490c711c2875dd238d7d8d9f4f46e335829cb8ee7e0e1623e952e372"
         ),
         .binaryTarget(
             name: "Libavdevice",
-            url: "https://github.com/mpvkit/MPVKit/releases/download/1.0.0/Libavdevice.xcframework.zip",
-            checksum: "65713615f53352b37baffb38c5b88d88bab647d050d999bcc4684344ab636bdf"
+            url: "https://github.com/mpvkit/MPVKit/releases/download/1.1.0-n9.0.2/Libavdevice.xcframework.zip",
+            checksum: "f29bde9d8f788337996f8b2759645a6e22e9056e4bc1e3494458193405f50a5d"
         ),
         .binaryTarget(
             name: "Libavformat",
-            url: "https://github.com/mpvkit/MPVKit/releases/download/1.0.0/Libavformat.xcframework.zip",
-            checksum: "2afb601375929640e743e7bdaa6c4a88e2b582a07e1c5f2dc95cc7f5b26a0810"
+            url: "https://github.com/mpvkit/MPVKit/releases/download/1.1.0-n9.0.2/Libavformat.xcframework.zip",
+            checksum: "0a840424d7a2d971687d6e96d995e21420cce1b27dae74687ff4f5f31dc36e73"
         ),
         .binaryTarget(
             name: "Libavfilter",
-            url: "https://github.com/mpvkit/MPVKit/releases/download/1.0.0/Libavfilter.xcframework.zip",
-            checksum: "3e71af8633d99d365f14b88064bceafd57acb23fc64db90e55b715a9c0dca328"
+            url: "https://github.com/mpvkit/MPVKit/releases/download/1.1.0-n9.0.2/Libavfilter.xcframework.zip",
+            checksum: "e764dc3b3d36abb26d6d0ae2f0c6a1de0b80a453f3ca4bf2bb6596c0f6464b19"
         ),
         .binaryTarget(
             name: "Libavutil",
-            url: "https://github.com/mpvkit/MPVKit/releases/download/1.0.0/Libavutil.xcframework.zip",
-            checksum: "5dc251c8807c501982edfb0bc9bddfee4148733142d6ebb947738c60fb3bf8d8"
+            url: "https://github.com/mpvkit/MPVKit/releases/download/1.1.0-n9.0.2/Libavutil.xcframework.zip",
+            checksum: "0ca518d2a3eab22763310d8bcdc977494ddb3daf3dc3b73a2ed84c5eefc13f75"
         ),
         .binaryTarget(
             name: "Libswresample",
-            url: "https://github.com/mpvkit/MPVKit/releases/download/1.0.0/Libswresample.xcframework.zip",
-            checksum: "d5c36acf2ff944e15706f4b7bfbf18bb1993ffc5b446c9f67f1aa79de5441f15"
+            url: "https://github.com/mpvkit/MPVKit/releases/download/1.1.0-n9.0.2/Libswresample.xcframework.zip",
+            checksum: "49edabb3c2e7fb97e6458f2e6a2fea66ab567b55258141e598fecfcd29cd9eeb"
         ),
         .binaryTarget(
             name: "Libswscale",
-            url: "https://github.com/mpvkit/MPVKit/releases/download/1.0.0/Libswscale.xcframework.zip",
-            checksum: "4fc00de6a7a8cddcdfe0eeb73b4f919cfaf9a0fd5a442f42a43e0f56e157d7c5"
+            url: "https://github.com/mpvkit/MPVKit/releases/download/1.1.0-n9.0.2/Libswscale.xcframework.zip",
+            checksum: "5aebc8107219d518d8e89f0af97365ff9758f91b3096a7d5c1a16e092745de39"
         ),
 
         .binaryTarget(
@@ -302,8 +302,8 @@ let package = Package(
 
         .binaryTarget(
             name: "Libmpv",
-            url: "https://github.com/mpvkit/MPVKit/releases/download/1.0.0/Libmpv.xcframework.zip",
-            checksum: "c381ceb4c1504efac12da95293e56585bbeb691634aa64e3a729f517169933ba"
+            url: "https://github.com/mpvkit/MPVKit/releases/download/1.1.0-n9.0.2/Libmpv.xcframework.zip",
+            checksum: "1d8651bebfe467bd5408751647de692cdacb1d19ba825e11785d770bc88c3225"
         ),
         //AUTO_GENERATE_TARGETS_END//
     ]

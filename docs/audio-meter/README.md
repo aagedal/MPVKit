@@ -75,7 +75,7 @@ python3 scripts/rebuild-macos-audio.py --cache-root /path/to/cached/MPVKit \
   --output /tmp/mpvkit-audio-candidate --build
 ```
 
-This exports exact FFmpeg n8.1.2/mpv v0.41.0 source tags, reapplies the source
+This exports the exact FFmpeg/mpv source tags selected by the Swift recipe, reapplies the source
 patches and builds fresh arm64/x86_64 outputs without modifying the cache.
 Only standalone FFmpeg/mpv programs are omitted. Keep the resulting build log,
 source exports and configurations with the release provenance.
@@ -130,3 +130,22 @@ staged build recipe and compiler configurations used for this candidate.
 Physical Intel hardware, physical output-device changes, audible latency,
 consumer app signing, compressed-source meter behavior and long-duration thermal
 performance are not established by these dependency tests.
+
+## FFmpeg 9.0.2 upstream update — 2026-10-15
+
+Merged official main through `d9194243bdc6`, including MPVKit 1.1.0 / FFmpeg
+n9.0.2. The custom macOS GPL targets are rebuilt together against n9.0.2 and
+published as `aagedal-1.1.0-n9.0.2-audio.1`. The LGPL targets use official
+1.1.0-n9.0.2 artifacts. Auxiliary library inputs are unchanged.
+
+Both architectures pass all eight audio-analysis signal/filter cases. The
+CoreAudio normal, notification, init-failure and format-failure probes each pass
+four cycles with zero invalid calls and zero remaining listeners. Archive checks
+verify all eight universal GPL targets and macOS deployment floors at most 12.
+Native scopes and decoder-raster remain disabled. Physical hotplug, physical
+Intel hardware and consumer app UI behavior are outside these dependency checks.
+
+[evidence-n9.0.2-20261015/](evidence-n9.0.2-20261015/) retains the acceptance
+reports and release hashes. The release source archive includes the exact
+staged FFmpeg/mpv sources, patched library-only recipe and compiler configuration.
+The isolated rebuild script reads version tags from the Swift recipe.
