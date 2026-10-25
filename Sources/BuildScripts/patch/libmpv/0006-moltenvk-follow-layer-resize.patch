@@ -1,0 +1,92 @@
+diff --git a/DOCS/man/options.rst b/DOCS/man/options.rst
+index fa71dc0..a785636 100644
+--- a/DOCS/man/options.rst
++++ b/DOCS/man/options.rst
+@@ -6953,6 +6953,18 @@ them.
+ 
+     Android with ``--gpu-context=android`` only.
+ 
++``--moltenvk-surface-size=<WxH>``
++    Notify the MoltenVK gpu context that the embedding application changed the
++    ``drawableSize`` of the ``CAMetalLayer`` passed via ``--wid``. Setting this
++    option resizes the swapchain to the layer's current ``drawableSize`` and
++    redraws immediately, also while paused. The value itself is only used to
++    detect changes; set it to the new ``drawableSize`` after updating the layer.
++
++    Changes are also picked up automatically while the VO is running, so this
++    is mainly needed to update a paused or idle player.
++
++    macOS/iOS with ``--gpu-context=moltenvk`` only.
++
+ ``--d3d11-composition-size=<WxH>``
+     Set size of the output for d3d11 composition mode.
+     When use composition mode, there is no window, must set the output size by
+diff --git a/options/options.c b/options/options.c
+index 716c3e6..6bb0bc4 100644
+--- a/options/options.c
++++ b/options/options.c
+@@ -245,6 +245,9 @@ static const m_option_t mp_vo_opt_list[] = {
+ #if HAVE_EGL_ANDROID
+     {"android-surface-size", OPT_SIZE_BOX(android_surface_size)},
+ #endif
++#if HAVE_MOLTENVK
++    {"moltenvk-surface-size", OPT_SIZE_BOX(android_surface_size)},
++#endif
+ #if HAVE_D3D11
+     {"d3d11-composition-size", OPT_SIZE_BOX(d3d11_composition_size)},
+ #endif
+diff --git a/video/out/vulkan/context_moltenvk.m b/video/out/vulkan/context_moltenvk.m
+index 445b907..7b050ce 100644
+--- a/video/out/vulkan/context_moltenvk.m
++++ b/video/out/vulkan/context_moltenvk.m
+@@ -26,6 +26,7 @@
+ struct priv {
+     struct mpvk_ctx vk;
+     CAMetalLayer *layer;
++    int width, height;
+ };
+ 
+ static void moltenvk_uninit(struct ra_ctx *ctx)
+@@ -73,16 +74,41 @@ fail:
+     return false;
+ }
+ 
++// The embedding application owns the layer and updates its drawableSize when
++// the host view changes size. Resize the swapchain to match, so vo->dwidth and
++// vo->dheight (and therefore the video and OSD rectangles) follow the layer.
++static void moltenvk_resize(struct ra_ctx *ctx, int w, int h)
++{
++    struct priv *p = ctx->priv;
++    p->width = w;
++    p->height = h;
++    ra_vk_ctx_resize(ctx, w, h);
++}
++
+ static bool moltenvk_reconfig(struct ra_ctx *ctx)
+ {
+     struct priv *p = ctx->priv;
+     CGSize s = p->layer.drawableSize;
+-    ra_vk_ctx_resize(ctx, s.width, s.height);
++    moltenvk_resize(ctx, s.width, s.height);
+     return true;
+ }
+ 
+ static int moltenvk_control(struct ra_ctx *ctx, int *events, int request, void *arg)
+ {
++    struct priv *p = ctx->priv;
++    if (request == VOCTRL_CHECK_EVENTS) {
++        // Pick up drawableSize changes made while the VO thread is running.
++        // A paused player only gets here when something wakes the VO; the
++        // application can set --moltenvk-surface-size to resize and redraw
++        // immediately.
++        CGSize s = p->layer.drawableSize;
++        int w = s.width, h = s.height;
++        if (w > 1 && h > 1 && (w != p->width || h != p->height)) {
++            moltenvk_resize(ctx, w, h);
++            *events |= VO_EVENT_RESIZE;
++        }
++        return VO_TRUE;
++    }
+     return VO_NOTIMPL;
+ }
+ 
