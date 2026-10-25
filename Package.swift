@@ -94,43 +94,43 @@ let package = Package(
         // GPL builds with MXF demuxer, VVC/APV decoders (MPV 0.41, FFmpeg n9.0.2), no LuaJIT
         .binaryTarget(
             name: "Libmpv-GPL",
-            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.1.0-n9.0.2-audio.1/Libmpv-GPL.xcframework.zip",
-            checksum: "59732502c468d695743c2012878f0433a39fb258cb4e650c41e29514a5385431"
+            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.1.0-n9.0.2-resize.1/Libmpv-GPL.xcframework.zip",
+            checksum: "6275a4164a649978bff96ec70ae801b89c9688075a6f8ba69f8069919f9aebdd"
         ),
         .binaryTarget(
             name: "Libavcodec-GPL",
-            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.1.0-n9.0.2-audio.1/Libavcodec-GPL.xcframework.zip",
-            checksum: "99a3005e484f8674a1c9aa4dac601c78aaae5dd0dd38ebbfc4d34d08789229fe"
+            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.1.0-n9.0.2-resize.1/Libavcodec-GPL.xcframework.zip",
+            checksum: "352ea36b9899a3025377bb272327afcb7e8e885929a02dca2b20dc5c11609f64"
         ),
         .binaryTarget(
             name: "Libavdevice-GPL",
-            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.1.0-n9.0.2-audio.1/Libavdevice-GPL.xcframework.zip",
-            checksum: "935865c4ec2df96e79126d213781667dfa3273139ce1cf4c2006dddf6f982244"
+            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.1.0-n9.0.2-resize.1/Libavdevice-GPL.xcframework.zip",
+            checksum: "662eabb62ce7481afafaf83b2a2f0c4be81aa2f5ad0c5f9c29c66f15adc14a18"
         ),
         .binaryTarget(
             name: "Libavformat-GPL",
-            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.1.0-n9.0.2-audio.1/Libavformat-GPL.xcframework.zip",
-            checksum: "a9d42602666ac65110cf305109fd1a43ac82496e4c674d0081d3454b2982ba96"
+            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.1.0-n9.0.2-resize.1/Libavformat-GPL.xcframework.zip",
+            checksum: "34f1d2ef8133ca3ea6ce9b0d179879ec78724aad2249539580d9f8ec80fecf96"
         ),
         .binaryTarget(
             name: "Libavfilter-GPL",
-            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.1.0-n9.0.2-audio.1/Libavfilter-GPL.xcframework.zip",
-            checksum: "7e305daf10997b543f2ee38fd14920008e3c320e5a9f24551c1f87f3cca55faf"
+            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.1.0-n9.0.2-resize.1/Libavfilter-GPL.xcframework.zip",
+            checksum: "46a5b76c9b22d21c7cdedf1d4a1235e664b2f39744976a9448d1c05f5f7f5c25"
         ),
         .binaryTarget(
             name: "Libavutil-GPL",
-            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.1.0-n9.0.2-audio.1/Libavutil-GPL.xcframework.zip",
-            checksum: "22f5e30bdedcd2436d3738ad606b60ca4f14a792aad51b3233a91ef00972bbc2"
+            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.1.0-n9.0.2-resize.1/Libavutil-GPL.xcframework.zip",
+            checksum: "3bc5c507516e89649527238a7aa37c71708a05710fd5664d46ed2f45738aee83"
         ),
         .binaryTarget(
             name: "Libswresample-GPL",
-            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.1.0-n9.0.2-audio.1/Libswresample-GPL.xcframework.zip",
-            checksum: "be3c9e3c96ff433a54c957e2afdfc14ce90a1ba4ad6a192db160108c19b12243"
+            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.1.0-n9.0.2-resize.1/Libswresample-GPL.xcframework.zip",
+            checksum: "d9e691fa3384ae553284e330b99fa1aad1901d1883bc1acf5df864de96fb1c98"
         ),
         .binaryTarget(
             name: "Libswscale-GPL",
-            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.1.0-n9.0.2-audio.1/Libswscale-GPL.xcframework.zip",
-            checksum: "20d79627f22b93c656efc2428359452c55499f75a33cad0497fd6ee48c240e51"
+            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.1.0-n9.0.2-resize.1/Libswscale-GPL.xcframework.zip",
+            checksum: "89d045937ce309bfa1f212d2eb7c8bcceae449cdc9c303619f9a71379f681fd6"
         ),
         //AUTO_GENERATE_TARGETS_BEGIN//
 
