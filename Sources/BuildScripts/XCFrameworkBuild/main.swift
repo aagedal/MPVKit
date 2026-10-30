@@ -726,7 +726,14 @@ private class BuildFFMPEG: BaseBuild {
         "--enable-demuxer=vc1", "--enable-demuxer=wav", "--enable-demuxer=webm_dash_manifest",
         // Image/animation formats
         "--enable-demuxer=gif", "--enable-demuxer=apng", "--enable-demuxer=image2", "--enable-demuxer=image2pipe",
-        "--enable-demuxer=webp_pipe", "--enable-demuxer=gif_pipe", "--enable-demuxer=png_pipe",
+        // FFmpeg names the image pipe demuxers image_<format>_pipe; configure silently ignores unknown names.
+        "--enable-demuxer=image_webp_pipe", "--enable-demuxer=image_gif_pipe", "--enable-demuxer=image_png_pipe",
+        "--enable-demuxer=image_jpeg_pipe", "--enable-demuxer=image_tiff_pipe", "--enable-demuxer=image_dpx_pipe",
+        "--enable-demuxer=image_exr_pipe", "--enable-demuxer=image_j2k_pipe", "--enable-demuxer=image_bmp_pipe",
+        "--enable-demuxer=image_sgi_pipe",
+        // Editing/intermediate containers and raw streams
+        "--enable-demuxer=nut", "--enable-demuxer=w64", "--enable-demuxer=gxf",
+        "--enable-demuxer=yuv4mpegpipe", "--enable-demuxer=dnxhd",
         // ./configure --list-bsfs
         "--enable-bsfs",
         // ./configure --list-decoders
@@ -748,14 +755,23 @@ private class BuildFFMPEG: BaseBuild {
         "--enable-decoder=vc1", "--enable-decoder=vp6", "--enable-decoder=vp6a", "--enable-decoder=vp6f",
         "--enable-decoder=vp7", "--enable-decoder=vp8", "--enable-decoder=vp9",
         "--enable-decoder=vvc", "--enable-decoder=apv", "--enable-decoder=dnxhd",
+        // Editing/intermediate codecs. rawvideo also covers v308/v408/v410/ayuv/2vuy/yuv2 (separate decoders were removed).
+        "--enable-decoder=rawvideo", "--enable-decoder=dvvideo", "--enable-decoder=prores_raw",
+        "--enable-decoder=v210", "--enable-decoder=v210x", "--enable-decoder=r210", "--enable-decoder=r10k",
+        "--enable-decoder=avrp", "--enable-decoder=avui", "--enable-decoder=y41p", "--enable-decoder=yuv4",
+        "--enable-decoder=zero12v", "--enable-decoder=cfhd", "--enable-decoder=qtrle", "--enable-decoder=utvideo",
+        "--enable-decoder=magicyuv", "--enable-decoder=cllc", "--enable-decoder=hqx", "--enable-decoder=hq_hqa",
+        "--enable-decoder=aic",
         // Image/animation formats
         "--enable-decoder=gif", "--enable-decoder=apng", "--enable-decoder=webp", "--enable-decoder=png",
+        "--enable-decoder=tiff", "--enable-decoder=jpeg2000", "--enable-decoder=dpx", "--enable-decoder=exr",
+        "--enable-decoder=targa", "--enable-decoder=bmp", "--enable-decoder=sgi",
         // 音频
         "--enable-decoder=aac*", "--enable-decoder=ac3*", "--enable-decoder=adpcm*", "--enable-decoder=alac*",
         "--enable-decoder=amr*", "--enable-decoder=ape", "--enable-decoder=cook",
         "--enable-decoder=dca", "--enable-decoder=dolby_e", "--enable-decoder=eac3*", "--enable-decoder=flac",
         "--enable-decoder=mp1*", "--enable-decoder=mp2*", "--enable-decoder=mp3*", "--enable-decoder=opus",
-        "--enable-decoder=pcm*",
+        "--enable-decoder=pcm*", "--enable-decoder=s302m", "--enable-decoder=dvaudio",
         "--enable-decoder=truehd", "--enable-decoder=tta", "--enable-decoder=vorbis", "--enable-decoder=wma*",
         // 字幕
         "--enable-decoder=ass", "--enable-decoder=ccaption", "--enable-decoder=dvbsub", "--enable-decoder=dvdsub",
