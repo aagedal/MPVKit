@@ -71,7 +71,7 @@ let package = Package(
                 "Libavcodec-GPL", "Libavdevice-GPL", "Libavfilter-GPL", "Libavformat-GPL", "Libavutil-GPL", "Libswresample-GPL", "Libswscale-GPL",
                 "Libssl", "Libcrypto", "Libass", "Libfreetype", "Libfribidi", "Libharfbuzz",
                 "MoltenVK", "Libshaderc_combined", "lcms2", "Libplacebo", "Libdovi", "Libunibreak",
-                "Libsmbclient", "gmp", "nettle", "hogweed", "gnutls", "Libdav1d", "Libuavs3d"
+                "Libsmbclient", "gmp", "nettle", "hogweed", "gnutls", "Libdav1d", "Libuavs3d", "Libx264-GPL"
             ],
             path: "Sources/_FFmpeg-GPL",
             linkerSettings: [
@@ -131,6 +131,11 @@ let package = Package(
             name: "Libswscale-GPL",
             url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.1.0-n9.0.2-editor.1/Libswscale-GPL.xcframework.zip",
             checksum: "0e6d47402e28bb9414d5e2cd65485365abdd785c63bb544af261a75054dbccc0"
+        ),
+        .binaryTarget(
+            name: "Libx264-GPL",
+            url: "https://github.com/aagedal/MPVKit/releases/download/PENDING/Libx264-GPL.xcframework.zip",
+            checksum: "PENDING"
         ),
         //AUTO_GENERATE_TARGETS_BEGIN//
 
