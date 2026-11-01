@@ -31,6 +31,9 @@ do {
     try BuildLittleCms().buildALL()
     try BuildPlacebo().buildALL()
     try BuildDav1d().buildALL()
+    if BaseBuild.options.enableGPL {
+        try BuildX264().buildALL()
+    }
     try BuildFFMPEG().buildALL()
 
     // mpv
@@ -44,7 +47,7 @@ do {
 
 
 enum Library: String, CaseIterable {
-    case libmpv, FFmpeg, libshaderc, vulkan, lcms2, libdovi, openssl, libunibreak, libfreetype, libfribidi, libharfbuzz, libass, libsmbclient, libplacebo, libdav1d, gmp, nettle, gnutls, libuchardet, libbluray, libluajit, libuavs3d
+    case libmpv, FFmpeg, libshaderc, vulkan, lcms2, libdovi, openssl, libunibreak, libfreetype, libfribidi, libharfbuzz, libass, libsmbclient, libplacebo, libdav1d, gmp, nettle, gnutls, libuchardet, libbluray, libluajit, libuavs3d, libx264
     var version: String {
         switch self {
         case .libmpv:
@@ -91,6 +94,8 @@ enum Library: String, CaseIterable {
             return "2.1.0-fix"
         case .libuavs3d:
             return "1.2.1-fix"
+        case .libx264:  // GPL H.264 encoder, built from source at BuildX264.revision
+            return "stable-b35605a"
         }
     }
 
@@ -140,6 +145,8 @@ enum Library: String, CaseIterable {
             return "https://github.com/mpvkit/libluajit-build/releases/download/\(self.version)/libluajit-all.zip"
         case .libuavs3d:
             return "https://github.com/mpvkit/libuavs3d-build/releases/download/\(self.version)/libuavs3d-all.zip"
+        case .libx264:
+            return "https://code.videolan.org/videolan/x264.git"
         }
     }
 
@@ -362,6 +369,14 @@ enum Library: String, CaseIterable {
                     checksum: "https://github.com/mpvkit/libuavs3d-build/releases/download/\(self.version)/Libuavs3d.xcframework.checksum.txt"
                 ),
             ]
+        case .libx264:
+            return  [
+                .target(
+                    name: "Libx264",
+                    url: "https://github.com/mpvkit/MPVKit/releases/download/\(BaseBuild.options.releaseVersion)/Libx264.xcframework.zip",
+                    checksum: ""
+                ),
+            ]
         }
     }
 }
@@ -531,6 +546,11 @@ private class BuildFFMPEG: BaseBuild {
                 ldFlags.append(contentsOf: ["-lresolv", "-lpthread", "-lz", "-liconv"])
             }
         }
+        // smbclient.pc lists glib/intl/pcre2 that nothing references; keep the programs
+        // linked to system libraries only (static archives are unaffected).
+        if platform == .macos {
+            ldFlags.append("-Wl,-dead_strip_dylibs")
+        }
         return ldFlags
     }
 
@@ -619,8 +639,11 @@ private class BuildFFMPEG: BaseBuild {
             arguments.append("--enable-asm")
         }
         if platform == .macos, arch.executable {
-            arguments.append("--enable-ffplay")
-            arguments.append("--enable-sdl2")
+            // ffmpeg and ffprobe from this configuration are published as the editor's
+            // media helpers, so they match the libraries exactly. ffplay would add SDL2.
+            arguments.append("--enable-ffmpeg")
+            arguments.append("--enable-ffprobe")
+            arguments.append("--disable-ffplay")
             arguments.append("--enable-decoder=rawvideo")
             arguments.append("--enable-filter=color")
             arguments.append("--enable-filter=lut")
@@ -636,7 +659,7 @@ private class BuildFFMPEG: BaseBuild {
         // so don't pass libshaderc to FFmpeg. libshaderc is still built for libplacebo/mpv.
         var dependencyLibrary = [Library.gmp, .gnutls, .libfreetype, .libharfbuzz, .libfribidi, .libass, .vulkan, .lcms2, .libplacebo, .libdav1d, .libuavs3d]
         if BaseBuild.options.enableGPL {
-            dependencyLibrary += [.libsmbclient]
+            dependencyLibrary += [.libsmbclient, .libx264]
         }
         for library in dependencyLibrary {
             let path = URL.currentDirectory + [library.rawValue, platform.rawValue, "thin", arch.rawValue]
@@ -646,6 +669,8 @@ private class BuildFFMPEG: BaseBuild {
                     arguments.append("--enable-protocol=\(library.rawValue)")
                 } else if library == .libdav1d || library == .libuavs3d {
                     arguments.append("--enable-decoder=\(library.rawValue)")
+                } else if library == .libx264 {
+                    arguments.append("--enable-encoder=\(library.rawValue)")
                 } else if library == .libass {
                     arguments.append("--enable-filter=ass")
                     arguments.append("--enable-filter=subtitles")
@@ -681,7 +706,7 @@ private class BuildFFMPEG: BaseBuild {
         "--disable-doc", "--disable-htmlpages", "--disable-manpages", "--disable-podpages", "--disable-txtpages",
         // Component options:
         "--enable-avcodec", "--enable-avformat", "--enable-avutil", "--enable-network", "--enable-swresample", "--enable-swscale",
-        "--disable-devices", "--disable-outdevs", "--disable-indevs",
+        "--disable-devices", "--disable-outdevs", "--disable-indevs", "--enable-indev=lavfi",
         // ,"--disable-pthreads"
         // ,"--disable-w32threads"
         // ,"--disable-os2threads"
@@ -701,6 +726,8 @@ private class BuildFFMPEG: BaseBuild {
         "--enable-muxer=flac", "--enable-muxer=dash", "--enable-muxer=hevc",
         "--enable-muxer=m4v", "--enable-muxer=matroska", "--enable-muxer=mov", "--enable-muxer=mp4",
         "--enable-muxer=mpegts", "--enable-muxer=webm*",
+        // Editor helpers: WAV/raw PCM (noise reduction, analysis), null (decode checks)
+        "--enable-muxer=wav", "--enable-muxer=pcm_f32le", "--enable-muxer=pcm_s16le", "--enable-muxer=rawvideo", "--enable-muxer=null",
         // ./configure --list-encoders
         "--disable-encoders",
         "--enable-encoder=aac", "--enable-encoder=alac", "--enable-encoder=flac", "--enable-encoder=pcm*",
@@ -708,78 +735,18 @@ private class BuildFFMPEG: BaseBuild {
         "--enable-encoder=hevc_videotoolbox", "--enable-encoder=prores", "--enable-encoder=prores_videotoolbox",
         // Still images for mpv screenshots (poster frames, thumbnails, still export)
         "--enable-encoder=png", "--enable-encoder=mjpeg",
+        // Editor helpers: ProRes (Kostya) for export/proxies/conversion; fixture codecs for verification
+        "--enable-encoder=prores_ks", "--enable-encoder=ffv1", "--enable-encoder=qtrle",
+        // defaults of the rawvideo and null muxers (raw frame dumps, decode checks)
+        "--enable-encoder=rawvideo", "--enable-encoder=wrapped_avframe",
         // ./configure --list-protocols
         "--enable-protocols",
         // ./configure --list-demuxers
-        // 用所有的demuxers的话，那avformat就会达到8MB了，指定的话，那就只要4MB。
-        "--disable-demuxers",
-        "--enable-demuxer=aac", "--enable-demuxer=ac3", "--enable-demuxer=aiff", "--enable-demuxer=amr",
-        "--enable-demuxer=ape", "--enable-demuxer=asf", "--enable-demuxer=ass", "--enable-demuxer=av1",
-        "--enable-demuxer=avi", "--enable-demuxer=caf", "--enable-demuxer=concat",
-        "--enable-demuxer=dash", "--enable-demuxer=data", "--enable-demuxer=dv",
-        "--enable-demuxer=eac3",
-        "--enable-demuxer=flac", "--enable-demuxer=flv", "--enable-demuxer=h264", "--enable-demuxer=hevc",
-        "--enable-demuxer=hls", "--enable-demuxer=live_flv", "--enable-demuxer=loas", "--enable-demuxer=m4v",
-        // matroska=mkv,mka,mks,mk3d
-        "--enable-demuxer=matroska", "--enable-demuxer=mov", "--enable-demuxer=mp3", "--enable-demuxer=mpeg*",
-        "--enable-demuxer=ogg", "--enable-demuxer=rm", "--enable-demuxer=rtsp", "--enable-demuxer=rtp",
-        "--enable-demuxer=srt", "--enable-demuxer=webvtt",
-        "--enable-demuxer=mxf", "--enable-demuxer=vvc",
-        "--enable-demuxer=vc1", "--enable-demuxer=wav", "--enable-demuxer=webm_dash_manifest",
-        // Image/animation formats
-        "--enable-demuxer=gif", "--enable-demuxer=apng", "--enable-demuxer=image2", "--enable-demuxer=image2pipe",
-        // FFmpeg names the image pipe demuxers image_<format>_pipe; configure silently ignores unknown names.
-        "--enable-demuxer=image_webp_pipe", "--enable-demuxer=image_gif_pipe", "--enable-demuxer=image_png_pipe",
-        "--enable-demuxer=image_jpeg_pipe", "--enable-demuxer=image_tiff_pipe", "--enable-demuxer=image_dpx_pipe",
-        "--enable-demuxer=image_exr_pipe", "--enable-demuxer=image_j2k_pipe", "--enable-demuxer=image_bmp_pipe",
-        "--enable-demuxer=image_sgi_pipe",
-        // Editing/intermediate containers and raw streams
-        "--enable-demuxer=nut", "--enable-demuxer=w64", "--enable-demuxer=gxf",
-        "--enable-demuxer=yuv4mpegpipe", "--enable-demuxer=dnxhd",
+        // Every demuxer: the same build supplies the editor's conversion helpers.
         // ./configure --list-bsfs
         "--enable-bsfs",
         // ./configure --list-decoders
-        // 用所有的decoders的话，那avcodec就会达到40MB了，指定的话，那就只要20MB。
-        "--disable-decoders",
-        // 视频
-        "--enable-decoder=av1", "--enable-decoder=dca", "--enable-decoder=dxv",
-        "--enable-decoder=ffv1", "--enable-decoder=ffvhuff", "--enable-decoder=flv",
-        "--enable-decoder=h263", "--enable-decoder=h263i", "--enable-decoder=h263p", "--enable-decoder=h264",
-        "--enable-decoder=hap", "--enable-decoder=hevc", "--enable-decoder=huffyuv",
-        "--enable-decoder=indeo5",
-        "--enable-decoder=mjpeg", "--enable-decoder=mjpegb", "--enable-decoder=mpeg*", "--enable-decoder=mts2",
-        "--enable-decoder=prores",
-        "--enable-decoder=mpeg4", "--enable-decoder=mpegvideo",
-        "--enable-decoder=rv10", "--enable-decoder=rv20", "--enable-decoder=rv30", "--enable-decoder=rv40",
-        "--enable-decoder=snow", "--enable-decoder=svq3",
-        "--enable-decoder=tscc", "--enable-decoder=txd",
-        "--enable-decoder=wmv1", "--enable-decoder=wmv2", "--enable-decoder=wmv3",
-        "--enable-decoder=vc1", "--enable-decoder=vp6", "--enable-decoder=vp6a", "--enable-decoder=vp6f",
-        "--enable-decoder=vp7", "--enable-decoder=vp8", "--enable-decoder=vp9",
-        "--enable-decoder=vvc", "--enable-decoder=apv", "--enable-decoder=dnxhd",
-        // Editing/intermediate codecs. rawvideo also covers v308/v408/v410/ayuv/2vuy/yuv2 (separate decoders were removed).
-        "--enable-decoder=rawvideo", "--enable-decoder=dvvideo", "--enable-decoder=prores_raw",
-        "--enable-decoder=v210", "--enable-decoder=v210x", "--enable-decoder=r210", "--enable-decoder=r10k",
-        "--enable-decoder=avrp", "--enable-decoder=avui", "--enable-decoder=y41p", "--enable-decoder=yuv4",
-        "--enable-decoder=zero12v", "--enable-decoder=cfhd", "--enable-decoder=qtrle", "--enable-decoder=utvideo",
-        "--enable-decoder=magicyuv", "--enable-decoder=cllc", "--enable-decoder=hqx", "--enable-decoder=hq_hqa",
-        "--enable-decoder=aic",
-        // Image/animation formats
-        "--enable-decoder=gif", "--enable-decoder=apng", "--enable-decoder=webp", "--enable-decoder=png",
-        "--enable-decoder=tiff", "--enable-decoder=jpeg2000", "--enable-decoder=dpx", "--enable-decoder=exr",
-        "--enable-decoder=targa", "--enable-decoder=bmp", "--enable-decoder=sgi",
-        // 音频
-        "--enable-decoder=aac*", "--enable-decoder=ac3*", "--enable-decoder=adpcm*", "--enable-decoder=alac*",
-        "--enable-decoder=amr*", "--enable-decoder=ape", "--enable-decoder=cook",
-        "--enable-decoder=dca", "--enable-decoder=dolby_e", "--enable-decoder=eac3*", "--enable-decoder=flac",
-        "--enable-decoder=mp1*", "--enable-decoder=mp2*", "--enable-decoder=mp3*", "--enable-decoder=opus",
-        "--enable-decoder=pcm*", "--enable-decoder=s302m", "--enable-decoder=dvaudio",
-        "--enable-decoder=truehd", "--enable-decoder=tta", "--enable-decoder=vorbis", "--enable-decoder=wma*",
-        // 字幕
-        "--enable-decoder=ass", "--enable-decoder=ccaption", "--enable-decoder=dvbsub", "--enable-decoder=dvdsub",
-        "--enable-decoder=mpl2", "--enable-decoder=movtext",
-        "--enable-decoder=pgssub", "--enable-decoder=srt", "--enable-decoder=ssa", "--enable-decoder=subrip",
-        "--enable-decoder=xsub", "--enable-decoder=webvtt",
+        // Every decoder: the same build supplies the editor's conversion helpers.
 
         // ./configure --list-filters
         "--disable-filters",
@@ -804,12 +771,56 @@ private class BuildFFMPEG: BaseBuild {
         "--enable-filter=chromaber_vulkan", "--enable-filter=flip_vulkan", "--enable-filter=gblur_vulkan",
         "--enable-filter=hflip_vulkan", "--enable-filter=nlmeans_vulkan", "--enable-filter=overlay_vulkan",
         "--enable-filter=vflip_vulkan", "--enable-filter=xfade_vulkan",
+        // Editor helpers (Aagedal Film Constructor Configuration/FFmpegRequirements.json):
+        // export, transitions and titles
+        "--enable-filter=alphamerge", "--enable-filter=chromakey", "--enable-filter=color", "--enable-filter=crop",
+        "--enable-filter=fade", "--enable-filter=gblur", "--enable-filter=geq", "--enable-filter=loop",
+        "--enable-filter=pad", "--enable-filter=scale_vt", "--enable-filter=sendcmd", "--enable-filter=setparams",
+        "--enable-filter=setsar", "--enable-filter=settb", "--enable-filter=deshake",
+        // export audio effects and noise reduction
+        "--enable-filter=acompressor", "--enable-filter=adelay", "--enable-filter=aeval", "--enable-filter=afftdn",
+        "--enable-filter=amerge", "--enable-filter=anullsink", "--enable-filter=anullsrc", "--enable-filter=apad",
+        "--enable-filter=asetpts", "--enable-filter=asplit", "--enable-filter=biquad",
+        // test sources and checks for generated fixtures and verification
+        "--enable-filter=sine", "--enable-filter=aevalsrc", "--enable-filter=testsrc", "--enable-filter=testsrc2",
+        "--enable-filter=smptehdbars", "--enable-filter=nullsrc", "--enable-filter=select", "--enable-filter=psnr",
+        "--enable-filter=drawbox", "--enable-filter=curves",
     ]
 
 }
 
 
 
+
+// x264 has no tagged releases; pin a commit on its stable branch.
+private class BuildX264: BaseBuild {
+    static let revision = "b35605ace3ddf7c1a5d67a2eb553f034aef41d55"
+
+    init() {
+        super.init(library: .libx264)
+    }
+
+    override func beforeBuild() throws {
+        if FileManager.default.fileExists(atPath: directoryURL.path) {
+            return
+        }
+        try Utility.launch(path: "/usr/bin/git", arguments: ["-c", "advice.detachedHead=false", "clone", "--branch", "stable", library.url, directoryURL.path])
+        try Utility.launch(path: "/usr/bin/git", arguments: ["-c", "advice.detachedHead=false", "checkout", BuildX264.revision], currentDirectoryURL: directoryURL)
+    }
+
+    override func arguments(platform: PlatformType, arch: ArchType) -> [String] {
+        var arguments = ["--enable-static", "--enable-pic", "--disable-cli", "--disable-opencl",
+                         "--disable-avs", "--disable-swscale", "--disable-lavf", "--disable-ffms", "--disable-gpac", "--disable-lsmash",
+                         "--host=\(platform.host(arch: arch))", "--sysroot=\(platform.isysroot)",
+                         // configure passes CFLAGS to C only; the assembly needs the deployment target too.
+                         "--extra-asflags=\(platform.cFlags(arch: arch).joined(separator: " "))"]
+        // As for FFmpeg: no x86_64 assembly in the xcframework slices.
+        if arch == .x86_64 {
+            arguments.append("--disable-asm")
+        }
+        return arguments
+    }
+}
 
 private class BuildBluray: ZipBaseBuild {
     init() {
