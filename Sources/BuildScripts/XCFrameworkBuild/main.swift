@@ -809,7 +809,9 @@ private class BuildX264: BaseBuild {
     override func arguments(platform: PlatformType, arch: ArchType) -> [String] {
         var arguments = ["--enable-static", "--enable-pic", "--disable-cli", "--disable-opencl",
                          "--disable-avs", "--disable-swscale", "--disable-lavf", "--disable-ffms", "--disable-gpac", "--disable-lsmash",
-                         "--host=\(platform.host(arch: arch))", "--sysroot=\(platform.isysroot)"]
+                         "--host=\(platform.host(arch: arch))", "--sysroot=\(platform.isysroot)",
+                         // configure passes CFLAGS to C only; the assembly needs the deployment target too.
+                         "--extra-asflags=\(platform.cFlags(arch: arch).joined(separator: " "))"]
         // As for FFmpeg: no x86_64 assembly in the xcframework slices.
         if arch == .x86_64 {
             arguments.append("--disable-asm")
