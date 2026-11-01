@@ -71,7 +71,7 @@ let package = Package(
                 "Libavcodec-GPL", "Libavdevice-GPL", "Libavfilter-GPL", "Libavformat-GPL", "Libavutil-GPL", "Libswresample-GPL", "Libswscale-GPL",
                 "Libssl", "Libcrypto", "Libass", "Libfreetype", "Libfribidi", "Libharfbuzz",
                 "MoltenVK", "Libshaderc_combined", "lcms2", "Libplacebo", "Libdovi", "Libunibreak",
-                "Libsmbclient", "gmp", "nettle", "hogweed", "gnutls", "Libdav1d", "Libuavs3d"
+                "Libsmbclient", "gmp", "nettle", "hogweed", "gnutls", "Libdav1d", "Libuavs3d", "Libx264-GPL"
             ],
             path: "Sources/_FFmpeg-GPL",
             linkerSettings: [
@@ -91,46 +91,52 @@ let package = Package(
             ]
         ),
 
-        // GPL builds with MXF demuxer, VVC/APV decoders (MPV 0.41, FFmpeg n9.0.2), no LuaJIT
+        // GPL builds (MPV 0.41, FFmpeg n9.0.2) shared with the Aagedal Film Constructor helpers: every
+        // decoder/demuxer, x264, ProRes (Kostya), editor filters/muxers; no LuaJIT
         .binaryTarget(
             name: "Libmpv-GPL",
-            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.1.0-n9.0.2-editor.1/Libmpv-GPL.xcframework.zip",
-            checksum: "0eda4727f837990741590d981377568e3d531e9aa508601012e79f8837cd8d0a"
+            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.1.0-n9.0.2-editor.2/Libmpv-GPL.xcframework.zip",
+            checksum: "8a7e6f7c11782760f844567f48028b6c338a99064fc96db97d680258e5ba6488"
         ),
         .binaryTarget(
             name: "Libavcodec-GPL",
-            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.1.0-n9.0.2-editor.1/Libavcodec-GPL.xcframework.zip",
-            checksum: "da9949c5223b77a1f5356c14de0e034dbefa6b32f8b94016c057bc411671ad10"
+            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.1.0-n9.0.2-editor.2/Libavcodec-GPL.xcframework.zip",
+            checksum: "98ace803dc572a4bb4380fc30d7ea3f7bb8855608476f939f03fea4241f9a58f"
         ),
         .binaryTarget(
             name: "Libavdevice-GPL",
-            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.1.0-n9.0.2-editor.1/Libavdevice-GPL.xcframework.zip",
-            checksum: "6e3c7d39eb156792cdc023990c0a85b5f3e243d1b362f843865b33333133a749"
+            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.1.0-n9.0.2-editor.2/Libavdevice-GPL.xcframework.zip",
+            checksum: "727823802a6edfd00badf8c9c20c0a300558c251a93e80b41f9a1f1e2f6536e1"
         ),
         .binaryTarget(
             name: "Libavformat-GPL",
-            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.1.0-n9.0.2-editor.1/Libavformat-GPL.xcframework.zip",
-            checksum: "abef1c9aec3e8bf1efeaaf6f0fa77be7cffd446032c99e79a5429f61b1225177"
+            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.1.0-n9.0.2-editor.2/Libavformat-GPL.xcframework.zip",
+            checksum: "d98d108667fa4f6576c12978f8d2f9a5d4c4e0935114f766e23853dbe1652e84"
         ),
         .binaryTarget(
             name: "Libavfilter-GPL",
-            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.1.0-n9.0.2-editor.1/Libavfilter-GPL.xcframework.zip",
-            checksum: "94d22bf3d139b6c7bf71f962077a20b6bcd95e4d21e8aad29b362bbc528b43d4"
+            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.1.0-n9.0.2-editor.2/Libavfilter-GPL.xcframework.zip",
+            checksum: "f3325a5706f40b7fc46eb900db789b66b79efb5d2bd2c627150c0388a4c64a2b"
         ),
         .binaryTarget(
             name: "Libavutil-GPL",
-            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.1.0-n9.0.2-editor.1/Libavutil-GPL.xcframework.zip",
-            checksum: "2c358926e1a96ea8bebad5a2cfaa3cacaabebe4ef9f4a5c8dc44d1b40480060b"
+            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.1.0-n9.0.2-editor.2/Libavutil-GPL.xcframework.zip",
+            checksum: "7610722b071b09599ae5a6b0fa30bc719e8a4c319ac996ba10cf39366dd0e98c"
         ),
         .binaryTarget(
             name: "Libswresample-GPL",
-            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.1.0-n9.0.2-editor.1/Libswresample-GPL.xcframework.zip",
-            checksum: "a73abf0fce06999af45e892bfaec72a2b19738f63f4e5b811c243465f823a1b7"
+            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.1.0-n9.0.2-editor.2/Libswresample-GPL.xcframework.zip",
+            checksum: "43a5e3eabb66eb0c4fe3059d980d88bb140b750c46f75000cdf2ce3389a1f893"
         ),
         .binaryTarget(
             name: "Libswscale-GPL",
-            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.1.0-n9.0.2-editor.1/Libswscale-GPL.xcframework.zip",
-            checksum: "0e6d47402e28bb9414d5e2cd65485365abdd785c63bb544af261a75054dbccc0"
+            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.1.0-n9.0.2-editor.2/Libswscale-GPL.xcframework.zip",
+            checksum: "f6a206a3cea4e17fc0c106aa62bc081113b2f85a1d99ac452ea57612776bf83b"
+        ),
+        .binaryTarget(
+            name: "Libx264-GPL",
+            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.1.0-n9.0.2-editor.2/Libx264-GPL.xcframework.zip",
+            checksum: "b9382b5bbe0717ced1017e1edb1bcfa2c0c3841e4e4dfa35d45f10a8f5f0b0b4"
         ),
         //AUTO_GENERATE_TARGETS_BEGIN//
 

@@ -5,7 +5,10 @@
 Only the new output directory is changed. Auxiliary dependency outputs remain
 read-only inputs. Source revisions are checked against the recipe's version tags;
 source patches are reapplied to clean exports, never inferred from cached edits.
-The library payloads use the normal recipe, with standalone CLI programs omitted.
+The library payloads use the normal recipe. Standalone CLI programs are omitted
+unless --programs is given, which keeps the arm64 ffmpeg/ffprobe that the
+editor ships as its media helpers (same configure run as the libraries).
+x264 is built from its pinned source, since no prebuilt dependency exists.
 """
 import argparse
 import json
@@ -33,6 +36,7 @@ def main():
     parser.add_argument('--cache-root', type=Path, required=True, help='MPVKit checkout with built dist dependencies')
     parser.add_argument('--output', type=Path, required=True, help='New staging directory')
     parser.add_argument('--build', action='store_true')
+    parser.add_argument('--programs', action='store_true', help='Also build ffmpeg/ffprobe for the editor helpers')
     args = parser.parse_args()
     root = Path(__file__).resolve().parents[1]
     cache, output = args.cache_root.resolve() / 'dist', args.output.resolve()
@@ -56,7 +60,7 @@ def main():
     shutil.copytree(root / 'docs', output / 'docs')
     (output / 'dist').mkdir()
     for child in cache.iterdir():
-        if child.is_dir() and child.name not in ['FFmpeg', 'libmpv', 'release'] and not child.name.startswith(('FFmpeg-', 'libmpv-')):
+        if child.is_dir() and child.name not in ['FFmpeg', 'libmpv', 'release', 'libx264'] and not child.name.startswith(('FFmpeg-', 'libmpv-', 'libx264-')):
             (output / 'dist' / child.name).symlink_to(child, target_is_directory=True)
     for library, version in libraries:
         destination = output / 'dist' / (library + '-' + version)
@@ -66,8 +70,9 @@ def main():
     entrypoint = output / 'Sources/BuildScripts/XCFrameworkBuild/main.swift'
     text = entrypoint.read_text()
     start, end = text.index('    // SSL\n'), text.index('    try BuildMPV().buildALL()')
-    text = text[:start] + '    try BuildFFMPEG().buildALL()\n' + text[end:]
-    text = text.replace('if platform == .macos, arch.executable {', 'if false {')
+    text = text[:start] + '    try BuildX264().buildALL()\n    try BuildFFMPEG().buildALL()\n' + text[end:]
+    if not args.programs:
+        text = text.replace('if platform == .macos, arch.executable {', 'if false {')
     text = text.replace('''        if !(platform == .macos && arch.executable) {
             array.append("-Dcplayer=false")
         }''', '        array.append("-Dcplayer=false")')
@@ -80,7 +85,7 @@ def main():
     base.write_text(text)
     report = {'source_revisions': revisions, 'cache': str(cache), 'output': str(output),
               'platform': 'macos', 'architectures': ['arm64', 'x86_64'], 'gpl': True,
-              'standalone_programs': False, 'native_scopes': False}
+              'standalone_programs': args.programs, 'native_scopes': False}
     if args.build:
         with (output / 'build.log').open('w') as log:
             run = subprocess.run(['swift', 'run', '--disable-sandbox', '--build-path', '.build',
