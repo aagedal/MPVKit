@@ -728,6 +728,7 @@ private class BuildFFMPEG: BaseBuild {
         "--enable-muxer=mpegts", "--enable-muxer=webm*",
         // Editor helpers: WAV/raw PCM (noise reduction, analysis), null (decode checks)
         "--enable-muxer=wav", "--enable-muxer=pcm_f32le", "--enable-muxer=pcm_s16le", "--enable-muxer=rawvideo", "--enable-muxer=null",
+        "--enable-muxer=nut", "--enable-muxer=image2",  // lossless intermediates and still fixtures in the editor's parity proofs
         // ./configure --list-encoders
         "--disable-encoders",
         "--enable-encoder=aac", "--enable-encoder=alac", "--enable-encoder=flac", "--enable-encoder=pcm*",

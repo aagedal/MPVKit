@@ -21,7 +21,7 @@ Compared with `editor.1`, the shared configuration adds components and removes n
   noise-reduction filters. That is every entry in the editor's
   `Configuration/FFmpegRequirements.json`, including test sources (`sine`, `testsrc2`,
   `smptehdbars`, …) and checks (`psnr`).
-- **Muxers:** `wav`, `pcm_f32le`, `pcm_s16le`, `rawvideo` and `null`.
+- **Muxers:** `wav`, `pcm_f32le`, `pcm_s16le`, `rawvideo`, `null`, `nut` and `image2`.
 - **Input device:** `lavfi`, for generated fixtures.
 
 On the build host's architecture (arm64), configure also builds `ffmpeg` and `ffprobe`.
