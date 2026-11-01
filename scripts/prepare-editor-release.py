@@ -122,7 +122,9 @@ def main():
         architectures = subprocess.check_output(['lipo', '-archs', str(binary)], text=True).split()
         assert set(architectures) == {'arm64', 'x86_64'}
         load_commands = subprocess.check_output(['otool', '-l', str(binary)], text=True)
-        minimums = re.findall(r'^\s+(?:minos|version) (\d+(?:\.\d+)+)\s*$', load_commands, re.MULTILINE)
+        # minos (LC_BUILD_VERSION) or version (LC_VERSION_MIN_*); not the build tools' versions.
+        minimums = re.findall(r'^\s+minos (\d+(?:\.\d+)+)\s*$', load_commands, re.MULTILINE)
+        minimums += re.findall(r'cmd LC_VERSION_MIN_\w+\n\s+cmdsize \d+\n\s+version (\d+(?:\.\d+)+)', load_commands)
         assert minimums, library
         assert all(tuple(map(int, value.split('.'))) <= (12, 0, 0) for value in minimums), (library, set(minimums))
         asset = output / (library + '-GPL.xcframework.zip')
