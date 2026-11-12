@@ -128,7 +128,8 @@ If you appreciate my current work, you can buy me a cup of coffee ☕️.
 
 ## Experimental native video scopes
 
-The opt-in macOS arm64 waveform/parade/vectorscope candidate is documented in
+The opt-in macOS arm64 waveform/parade/vectorscope candidate (GPU compute on
+gpu-next, CPU fallback) is documented in
 [docs/native-scopes/README.md](docs/native-scopes/README.md). Released package
 URLs remain unchanged.
 

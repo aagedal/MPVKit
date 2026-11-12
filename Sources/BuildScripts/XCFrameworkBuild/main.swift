@@ -388,7 +388,7 @@ private class BuildMPV: BaseBuild {
         if BaseBuild.options.enableNativeScopes {
             let prepare = URL.currentDirectory + "../scripts/prepare-native-scopes.py"
             try Utility.launch(path: "/usr/bin/env", arguments: ["python3", prepare.path, directoryURL.path])
-        } else if FileManager.default.fileExists(atPath: (directoryURL + "player/scope_provider.inc").path) {
+        } else if FileManager.default.fileExists(atPath: (directoryURL + "player/scopes.c").path) {
             throw NSError(domain: "Experimental native-scope sources require enable-native-scopes; use a fresh dist tree for a normal build", code: 1)
         }
     }
