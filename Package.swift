@@ -94,8 +94,8 @@ let package = Package(
         // GPL builds with MXF demuxer, VVC/APV decoders (MPV 0.41, FFmpeg n9.0.2), no LuaJIT
         .binaryTarget(
             name: "Libmpv-GPL",
-            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.1.0-n9.0.2-resize.1/Libmpv-GPL.xcframework.zip",
-            checksum: "6275a4164a649978bff96ec70ae801b89c9688075a6f8ba69f8069919f9aebdd"
+            url: "https://github.com/aagedal/MPVKit/releases/download/aagedal-1.1.0-n9.0.2-history.1/Libmpv-GPL.xcframework.zip",
+            checksum: "1fb1dc97b90d2f703a334d38c81534c118f160d82c2b6d42fe5ebdd4a1ddfe93"
         ),
         .binaryTarget(
             name: "Libavcodec-GPL",
