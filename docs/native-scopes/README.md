@@ -1,9 +1,11 @@
-# Experimental native video scopes (macOS)
+# Native video scopes (macOS)
 
-An opt-in libmpv provider for waveform, RGBY parade and vectorscope analysis of
-the presented frame, plus the default-off decoder raster used for pixel-exact
-paused capture. Both are built only with `enable-native-scopes`; released
-package URLs and the normal patch sequence are unchanged.
+A libmpv provider for waveform, RGBY parade and vectorscope analysis of the
+presented frame, plus the default-off decoder raster used for pixel-exact
+paused capture. Both are part of every build since
+`aagedal-1.1.0-n9.0.2-mpv0.42` (standard mpv patch 0009). The scopes command
+only does work when called; the decoder raster only caches frames with
+`--aagedal-decoder-raster=yes`.
 
 ## Design
 
@@ -72,19 +74,12 @@ like `time-pos`. The cache sizes hardware frames with the shared
 
 ## Build
 
-```sh
-make build enable-gpl platform=macos enable-native-scopes
-```
+Every build includes it: `Sources/BuildScripts/patch/libmpv/0009-native-scopes-and-decoder-raster.patch`
+is applied with the other mpv patches. This fork builds macOS for arm64 only.
+Releases are prepared with `scripts/rebuild-macos-audio.py` and
+`scripts/prepare-editor-release.py` (see the [editor helpers](../editor-helpers/README.md)).
 
-The option requires `enable-gpl` and exactly `platform=macos`, and restricts
-source builds to arm64. After the standard MPVKit mpv patches, the build applies
-`Sources/BuildScripts/experimental/native-scopes/mpv-0.42.0-native-scopes.patch`
-through `scripts/prepare-native-scopes.py`, which recognises an exact previous
-application and rejects partial or modified ones. A normal build rejects a
-cached experimental mpv tree; use separate checkouts for normal and
-experimental work.
-
-The patch no longer carries CoreAudio changes: mpv 0.42.0 fixed the channel-map
+Unlike the 0.41 candidate, the patch carries no CoreAudio changes: mpv 0.42.0 fixed the channel-map
 handling upstream ("ao_coreaudio: remove misusage of audio unit channel map
 API"), and the init-failure cleanup is upstream too.
 
@@ -111,10 +106,8 @@ are conservative.
   of 90/180/270° and horizontal/vertical flips match the mapping exactly and are
   byte-identical to FFmpeg's own auto-rotated decode.
 
-- **Recipe.** A fresh checkout builds with `enable-native-scopes` and the
-  resulting libmpv contains the new commands. This needed a fix in
-  `base.swift`: framework creation ignored the arm64-only restriction and
-  skipped every source-built xcframework.
+- **Recipe.** A fresh checkout built the then opt-in recipe and the resulting
+  libmpv contained the new commands.
 
 Timings at plot width 720 on UHD 60 fps SDR/PQ/HLG (all three plots, mean of 30
 calls, [uhd-timing.json](evidence-20261112/uhd-timing.json)):
@@ -144,8 +137,7 @@ python3 scripts/test-native-scopes.py /path/to/mpv \
   --placebo-include dist/libplacebo/macos/thin/arm64/include
 ```
 
-This tests patch application, idempotence, modified-source rejection and the
-sanitized math cases. `Tests/NativeScopes/mpv_scopes_harness.c` and
+This runs the sanitized math cases. `Tests/NativeScopes/mpv_scopes_harness.c` and
 `mpv_raster_harness.c` are native clients; compile them as Objective-C with
 `-DSCOPE_GPU` for gpu-next on a CAMetalLayer (needed for the GPU backend and for
 actual VideoToolbox frames), or as C for vo=null. Link them like the `mpv`

@@ -1,3 +1,11 @@
+Subject: [PATCH] Native video scopes and decoder raster
+
+aagedal-scopes (protocol 2): waveform, RGBY parade and vectorscope of the
+presented frame, computed with libplacebo compute shaders in vo_gpu_next and
+with a CPU fallback for other VOs. aagedal-decoder-raster (protocol 2): the
+paused decoder raster for pixel-exact inspection, opt-in with
+--aagedal-decoder-raster. See docs/native-scopes/README.md.
+
 diff --git a/common/av_common.c b/common/av_common.c
 index b3ca3d3..be58114 100644
 --- a/common/av_common.c

@@ -84,8 +84,8 @@ def main():
         task.environment = environment''')
     base.write_text(text)
     report = {'source_revisions': revisions, 'cache': str(cache), 'output': str(output),
-              'platform': 'macos', 'architectures': ['arm64', 'x86_64'], 'gpl': True,
-              'standalone_programs': args.programs, 'native_scopes': False}
+              'platform': 'macos', 'architectures': ['arm64'], 'gpl': True,
+              'standalone_programs': args.programs, 'native_scopes': True}
     if args.build:
         with (output / 'build.log').open('w') as log:
             run = subprocess.run(['swift', 'run', '--disable-sandbox', '--build-path', '.build',

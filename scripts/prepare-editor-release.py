@@ -95,7 +95,7 @@ def main():
     needed |= {(name,) for name in EVERYTHING}
     # Check compiled configuration, not just the requested command-line flags.
     configurations = {}
-    for arch in ['arm64', 'x86_64']:
+    for arch in ['arm64']:
         scratch = build / f'dist/FFmpeg/macos/scratch/{arch}'
         components = (scratch / 'config_components.h').read_text()
         missing = sorted(names[0] for names in needed if not any(f'#define CONFIG_{name} 1' in components for name in names))
@@ -116,11 +116,11 @@ def main():
         with zipfile.ZipFile(original_archive) as archive:
             info = plistlib.loads(archive.read(library + '.xcframework/Info.plist'))['AvailableLibraries']
         assert len(info) == 1 and info[0]['SupportedPlatform'] == 'macos'
-        assert set(info[0]['SupportedArchitectures']) == {'arm64', 'x86_64'}
+        assert set(info[0]['SupportedArchitectures']) == {'arm64'}
         component = COMPONENT.get(library, 'FFmpeg')
         binary = build / f'dist/{component}/macos' / info[0]['BinaryPath']
         architectures = subprocess.check_output(['lipo', '-archs', str(binary)], text=True).split()
-        assert set(architectures) == {'arm64', 'x86_64'}
+        assert set(architectures) == {'arm64'}
         load_commands = subprocess.check_output(['otool', '-l', str(binary)], text=True)
         # minos (LC_BUILD_VERSION) or version (LC_VERSION_MIN_*); not the build tools' versions.
         minimums = re.findall(r'^\s+minos (\d+(?:\.\d+)+)\s*$', load_commands, re.MULTILINE)
@@ -195,7 +195,7 @@ Licences: `COPYING.GPLv3`, `FFmpeg-LICENSE.md`, `x264-COPYING`, `MPVKit-LICENSE`
 ''')
     # Byte-for-byte input configurations and source patches accompany the release.
     provenance = output / 'provenance'; provenance.mkdir()
-    for arch in ['arm64', 'x86_64']:
+    for arch in ['arm64']:
         for name in ['config.h', 'config_components.h', 'ffbuild/config.mak']:
             source = build / f'dist/FFmpeg/macos/scratch/{arch}' / name
             shutil.copyfile(source, provenance / f'ffmpeg-{arch}-{source.name}')
@@ -205,7 +205,7 @@ Licences: `COPYING.GPLv3`, `FFmpeg-LICENSE.md`, `x264-COPYING`, `MPVKit-LICENSE`
     shutil.copytree(root / 'Sources/BuildScripts/patch', provenance / 'patches')
     package_sources(root, build, x264, provenance, output / sources_archive(args.tag))
     report = {'tag': args.tag, 'platform': 'macos', 'minimum_os': '12.0', 'gpl': True,
-              'native_scopes': False, 'artifacts': artifacts, 'helpers': build_record}
+              'native_scopes': True, 'artifacts': artifacts, 'helpers': build_record}
     (output / 'release.json').write_text(json.dumps(report, indent=2) + '\n')
     print(json.dumps(report, indent=2))
 

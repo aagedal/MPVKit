@@ -8,10 +8,9 @@ playback does not acquire an analysis filter or require capture permissions.
 The LGPL products and other platforms retain their existing release artifacts.
 
 The normal mpv source patch sequence also includes the CoreAudio
-disposed-handle fix; the failure-cleanup fix is upstream since mpv 0.42.0. The
-experimental scope patch applies after the shared patches and no longer touches
-CoreAudio; native scopes and decoder-raster remain opt-in and are not included
-in the audio-meter binary release. FFmpeg's existing Metal buffer
+disposed-handle fix; the failure-cleanup fix is upstream since mpv 0.42.0.
+Since `aagedal-1.1.0-n9.0.2-mpv0.42` the native scopes and decoder raster
+(patch 0009) are part of every build. FFmpeg's existing Metal buffer
 compatibility source preparation is now idempotent across repeated builds.
 
 ## Consumer example

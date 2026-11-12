@@ -126,12 +126,14 @@ If you appreciate my current work, you can buy me a cup of coffee ☕️.
 
 `MPVKit` bundles (`frameworks`, `xcframeworks`), which include both `libmpv` and `FFmpeg` libraries, are also licensed under the LGPL v3.0. However, if the source code is built using the optional `enable-gpl` flag or prebuilt binaries with `-GPL` postfix are used, then `MPVKit` bundles become subject to the GPL v3.0.
 
-## Experimental native video scopes
+## Aagedal fork: Apple Silicon, native scopes, backward playback
 
-The opt-in macOS arm64 waveform/parade/vectorscope candidate (GPU compute on
-gpu-next, CPU fallback) is documented in
-[docs/native-scopes/README.md](docs/native-scopes/README.md). Released package
-URLs remain unchanged.
+This fork builds macOS for arm64 (Apple Silicon) only. Every build includes the
+native waveform/parade/vectorscope provider (GPU compute on gpu-next, CPU
+fallback) and the decoder raster, see
+[docs/native-scopes/README.md](docs/native-scopes/README.md), and bounded,
+smooth backward playback with hardware decoding, see
+[docs/reverse-playback/README.md](docs/reverse-playback/README.md).
 
 ## Aagedal macOS audio analysis
 
