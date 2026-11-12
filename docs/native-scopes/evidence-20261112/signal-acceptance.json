@@ -1,0 +1,263 @@
+[
+  {
+    "case": "sdr",
+    "signalBins": "passed",
+    "backends": [
+      "gpu",
+      "cpu"
+    ],
+    "gpu": {
+      "w": 64,
+      "h": 36,
+      "pts": 0.0,
+      "primaries": "bt.709",
+      "transfer": "srgb",
+      "peak": 100,
+      "analysisW": 16,
+      "analysisH": 16,
+      "dolbyVision": 0
+    },
+    "cpu": {
+      "w": 64,
+      "h": 36,
+      "pts": 0.0,
+      "primaries": "bt.709",
+      "transfer": "srgb",
+      "peak": 100,
+      "analysisW": 16,
+      "analysisH": 16,
+      "dolbyVision": 0
+    },
+    "timingMS": {
+      "gpu": 0.649,
+      "gpuCPU": 0.8197,
+      "gpuWaveformOnly": 0.578,
+      "cpu": 0.0584,
+      "cpuCPU": 0.0744,
+      "cpuWaveformOnly": 0.0441,
+      "screenshotOnly": 0.9106
+    },
+    "firstPTS": 0.0,
+    "lastPTS": 0.0,
+    "seekAndStop": true
+  },
+  {
+    "case": "pq",
+    "signalBins": "passed",
+    "backends": [
+      "gpu",
+      "cpu"
+    ],
+    "gpu": {
+      "w": 64,
+      "h": 36,
+      "pts": 0.0,
+      "primaries": "bt.2020",
+      "transfer": "pq",
+      "peak": 10000,
+      "analysisW": 16,
+      "analysisH": 16,
+      "dolbyVision": 0
+    },
+    "cpu": {
+      "w": 64,
+      "h": 36,
+      "pts": 0.0,
+      "primaries": "bt.2020",
+      "transfer": "pq",
+      "peak": 10000,
+      "analysisW": 16,
+      "analysisH": 16,
+      "dolbyVision": 0
+    },
+    "timingMS": {
+      "gpu": 0.6857,
+      "gpuCPU": 0.8149,
+      "gpuWaveformOnly": 0.8243,
+      "cpu": 0.1679,
+      "cpuCPU": 0.1477,
+      "cpuWaveformOnly": 0.1428,
+      "screenshotOnly": 1.521
+    },
+    "firstPTS": 0.0,
+    "lastPTS": 0.0,
+    "seekAndStop": true
+  },
+  {
+    "case": "hlg",
+    "signalBins": "passed",
+    "backends": [
+      "gpu",
+      "cpu"
+    ],
+    "gpu": {
+      "w": 64,
+      "h": 36,
+      "pts": 0.0,
+      "primaries": "bt.2020",
+      "transfer": "hlg",
+      "peak": 1000,
+      "analysisW": 16,
+      "analysisH": 16,
+      "dolbyVision": 0
+    },
+    "cpu": {
+      "w": 64,
+      "h": 36,
+      "pts": 0.0,
+      "primaries": "bt.2020",
+      "transfer": "hlg",
+      "peak": 1000,
+      "analysisW": 16,
+      "analysisH": 16,
+      "dolbyVision": 0
+    },
+    "timingMS": {
+      "gpu": 0.5507,
+      "gpuCPU": 0.7416,
+      "gpuWaveformOnly": 0.4098,
+      "cpu": 0.0903,
+      "cpuCPU": 0.1155,
+      "cpuWaveformOnly": 0.0868,
+      "screenshotOnly": 1.1563
+    },
+    "firstPTS": 0.0,
+    "lastPTS": 0.0,
+    "seekAndStop": true
+  },
+  {
+    "case": "pq-bars",
+    "signalBins": "passed",
+    "backends": [
+      "gpu",
+      "cpu"
+    ],
+    "gpu": {
+      "w": 64,
+      "h": 36,
+      "pts": 0.0,
+      "primaries": "bt.2020",
+      "transfer": "pq",
+      "peak": 10000,
+      "analysisW": 16,
+      "analysisH": 16,
+      "dolbyVision": 0
+    },
+    "cpu": {
+      "w": 64,
+      "h": 36,
+      "pts": 0.0,
+      "primaries": "bt.2020",
+      "transfer": "pq",
+      "peak": 10000,
+      "analysisW": 16,
+      "analysisH": 16,
+      "dolbyVision": 0
+    },
+    "timingMS": {
+      "gpu": 0.8933,
+      "gpuCPU": 0.841,
+      "gpuWaveformOnly": 1.4439,
+      "cpu": 0.3637,
+      "cpuCPU": 0.1643,
+      "cpuWaveformOnly": 0.1626,
+      "screenshotOnly": 1.5257
+    },
+    "firstPTS": 0.0,
+    "lastPTS": 0.0,
+    "seekAndStop": true
+  },
+  {
+    "case": "hlg-bars",
+    "signalBins": "passed",
+    "backends": [
+      "gpu",
+      "cpu"
+    ],
+    "gpu": {
+      "w": 64,
+      "h": 36,
+      "pts": 0.0,
+      "primaries": "bt.2020",
+      "transfer": "hlg",
+      "peak": 1000,
+      "analysisW": 16,
+      "analysisH": 16,
+      "dolbyVision": 0
+    },
+    "cpu": {
+      "w": 64,
+      "h": 36,
+      "pts": 0.0,
+      "primaries": "bt.2020",
+      "transfer": "hlg",
+      "peak": 1000,
+      "analysisW": 16,
+      "analysisH": 16,
+      "dolbyVision": 0
+    },
+    "timingMS": {
+      "gpu": 0.6345,
+      "gpuCPU": 0.7837,
+      "gpuWaveformOnly": 0.5099,
+      "cpu": 0.1342,
+      "cpuCPU": 0.1309,
+      "cpuWaveformOnly": 0.1024,
+      "screenshotOnly": 1.336
+    },
+    "firstPTS": 0.0,
+    "lastPTS": 0.0,
+    "seekAndStop": true
+  },
+  {
+    "case": "compare sdr.mkv",
+    "agreementWithinOneBin": {
+      "waveform": 0.849,
+      "parade": 0.733,
+      "vectorscope": 0.4967
+    },
+    "timingMS": {
+      "gpu": 2.1328,
+      "gpuCPU": 1.4833,
+      "gpuWaveformOnly": 1.83,
+      "cpu": 5.7117,
+      "cpuCPU": 5.7907,
+      "cpuWaveformOnly": 4.3234,
+      "screenshotOnly": 15.0936
+    }
+  },
+  {
+    "case": "compare pq.mkv",
+    "agreementWithinOneBin": {
+      "waveform": 0.7757,
+      "parade": 0.9119,
+      "vectorscope": 0.5806
+    },
+    "timingMS": {
+      "gpu": 2.1976,
+      "gpuCPU": 1.5869,
+      "gpuWaveformOnly": 1.7613,
+      "cpu": 10.8632,
+      "cpuCPU": 10.3686,
+      "cpuWaveformOnly": 8.5149,
+      "screenshotOnly": 19.9044
+    }
+  },
+  {
+    "case": "compare hlg.mkv",
+    "agreementWithinOneBin": {
+      "waveform": 0.7643,
+      "parade": 0.9528,
+      "vectorscope": 0.5806
+    },
+    "timingMS": {
+      "gpu": 2.1973,
+      "gpuCPU": 1.6716,
+      "gpuWaveformOnly": 1.9509,
+      "cpu": 11.2846,
+      "cpuCPU": 10.4406,
+      "cpuWaveformOnly": 8.3497,
+      "screenshotOnly": 18.7713
+    }
+  }
+]

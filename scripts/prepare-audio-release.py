@@ -29,7 +29,7 @@ def main():
     root = Path(__file__).resolve().parents[1]
     build, output = args.candidate.resolve(), args.output.resolve()
     # Check compiled configuration, not just the requested command-line flags.
-    for arch in ['arm64', 'x86_64']:
+    for arch in ['arm64']:
         config = (build / f'dist/FFmpeg/macos/scratch/{arch}/config_components.h').read_text()
         for feature in ['ASTATS', 'ASETNSAMPLES', 'EBUR128']:
             assert f'#define CONFIG_{feature}_FILTER 1' in config
@@ -45,11 +45,11 @@ def main():
         with zipfile.ZipFile(original_archive) as archive:
             info = plistlib.loads(archive.read(library + '.xcframework/Info.plist'))['AvailableLibraries']
         assert len(info) == 1 and info[0]['SupportedPlatform'] == 'macos'
-        assert set(info[0]['SupportedArchitectures']) == {'arm64', 'x86_64'}
+        assert set(info[0]['SupportedArchitectures']) == {'arm64'}
         component = 'libmpv' if library == 'Libmpv' else 'FFmpeg'
         binary = build / f'dist/{component}/macos' / info[0]['BinaryPath']
         architectures = subprocess.check_output(['lipo', '-archs', str(binary)], text=True).split()
-        assert set(architectures) == {'arm64', 'x86_64'}
+        assert set(architectures) == {'arm64'}
         load_commands = subprocess.check_output(['otool', '-l', str(binary)], text=True)
         minimums = re.findall(r'^\s+(?:minos|version) (\d+(?:\.\d+)+)\s*$', load_commands, re.MULTILINE)
         assert minimums, library
@@ -72,7 +72,7 @@ def main():
     (output / 'Package.swift').write_text(manifest)
     # Byte-for-byte input configurations and source patches accompany the release.
     provenance = output / 'provenance'; provenance.mkdir()
-    for arch in ['arm64', 'x86_64']:
+    for arch in ['arm64']:
         for name in ['config.h', 'config_components.h', 'ffbuild/config.mak']:
             source = build / f'dist/FFmpeg/macos/scratch/{arch}' / name
             target = provenance / f'ffmpeg-{arch}-{source.name}'
@@ -82,7 +82,7 @@ def main():
     shutil.copytree(root / 'Sources/BuildScripts/patch', provenance / 'patches')
     report = {'tag': args.tag, 'platform': 'macos', 'minimum_os': '12.0',
               'filters': ['astats', 'asetnsamples', 'ebur128'], 'gpl': True,
-              'native_scopes': False, 'artifacts': artifacts}
+              'native_scopes': True, 'artifacts': artifacts}
     (output / 'release.json').write_text(json.dumps(report, indent=2) + '\n')
     print(json.dumps(report, indent=2))
 

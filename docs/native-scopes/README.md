@@ -1,162 +1,159 @@
-# Experimental native video scopes (macOS arm64)
+# Native video scopes (macOS)
 
-This branch adds an opt-in libmpv provider for waveform, RGBY parade and
-vectorscope analysis. It reads the current VO input frame, preserves source HDR
-transfer values, downsamples once, and returns all three diagnostic images with
-the frame PTS and track/color metadata. It does not invoke `screenshot-raw` or
-open a second decoder. Native CPU analysis releases mpv's core lock while doing
-the expensive work; the app admits one request at a time.
+A libmpv provider for waveform, RGBY parade and vectorscope analysis of the
+presented frame, plus the default-off decoder raster used for pixel-exact
+paused capture. Both are part of every build since
+`aagedal-1.1.0-n9.0.2-mpv0.42` (standard mpv patch 0009). The scopes command
+only does work when called; the decoder raster only caches frames with
+`--aagedal-decoder-raster=yes`.
 
-`Package.swift` references released binaries, including the separate macOS GPL
-audio-meter release. Selecting this branch as a Swift package does not activate
-the experimental video scope provider. Build and publish a separately qualified candidate before repinning
-an app. No existing release is replaced, and the decoder-raster cache remains
-explicitly default-off.
+## Design
 
-The audio-meter build moves the published CoreAudio cleanup fixes into the
-shared patch sequence. This experimental patch is rebased onto that sequence
-and retains the cleanup and hotplug ordering. The historical numerical evidence
-below predates that source-maintenance change; it does not qualify a newly built
-scope binary. See [audio analysis](../audio-meter/README.md).
+`aagedal-scopes` analyses the encoded source signal (HDR transfer values are
+kept, never tone mapped) and returns premultiplied BGRA plots.
 
-## Existing app compatibility
+- **GPU (gpu-next).** The command asks the VO for scopes
+  (`VOCTRL_AAGEDAL_SCOPES`). `vo_gpu_next` takes the frame a screenshot would
+  capture, renders it once with libplacebo into an RGBA16 raster in its own
+  color space (decode, crop, rotate and box-average only), then compute passes
+  bin every sample with atomics, find the plot maxima and paint the plots. Only
+  the painted plots are read back. VideoToolbox frames are never downloaded.
+  Dolby Vision is analysed after reshaping, as the BT.2020 PQ signal it
+  decodes to.
+- **CPU fallback.** For any other VO (vo=null, the libmpv render API) the VO
+  frame is analysed with the core unlocked. Hardware frames are mapped
+  read-only instead of downloaded where FFmpeg supports it (VideoToolbox),
+  swscale area-averages to the analysis size, and the binning uses 12-bit
+  lookup tables instead of per-sample transfer functions.
 
-Aagedal Media Converter's existing exact pin
-`400202b687841fb394cbf0ef59ad8c6fcfc1275b` continues to resolve its original
-binaries. Moving MPVKit `main` does not change that pin. The audio-meter release
-updates all eight macOS GPL binary URLs/checksums for consumers explicitly
-selecting the new revision/tag; it does not activate experimental video scopes.
-LGPL/other-platform targets retain their existing artifacts.
+Both backends share one definition of the bins and paint rules (`video/scope.c`;
+the GLSL in `video/out/gpu_next/scopes.c` mirrors it). Plot columns follow the
+displayed image: rotation moves samples between columns, vertical flips (applied
+after rotation in display space) do not.
 
-The earlier [converter-compatibility.json](evidence-20261015/converter-compatibility.json)
-records the dependency-identity check made before the audio-meter release. Its
-byte-identical manifest statement is historical, not a description of the new
-GPL package manifest. Consumer application rebuild/signing and meter presentation
-are separate from the dependency validation in [audio analysis](../audio-meter/README.md).
-
-## Build
-
-With the repository's normal build prerequisites installed, use a fresh checkout:
-
-```sh
-make build enable-gpl platform=macos enable-native-scopes
-```
-
-The experimental option requires both `enable-gpl` and exactly `platform=macos`.
-It restricts source builds to arm64, including FFmpeg and libmpv. Qualified
-prebuilt auxiliary libraries may retain their existing slices. Other platforms
-and x86_64 are not qualified for this candidate. Default builds do not apply
-the experimental patch. A normal build rejects a cached experimental mpv tree;
-use separate checkouts/build directories for normal and experimental work.
-
-After the standard MPVKit mpv patches, the build applies
-`Sources/BuildScripts/experimental/native-scopes/mpv-0.41.0-native-scopes.patch`.
-The patch includes:
-
-- The native waveform/parade/vectorscope command and bounded C computation.
-- The protocol-2 paused decoder-raster prerequisite shared with the validated
-  application candidate. Its cache stays off unless `aagedal-decoder-raster=yes`
-  is explicitly supplied. Live scopes do not need that cache.
-- The retained CoreAudio routing/cleanup source corrections used by that
-  candidate, so this source build preserves those already-published fixes.
-
-The combined patch applies cleanly to upstream mpv v0.41.0 after the current
-MPVKit patch sequence. The resulting source files were compared with the
-previously built and accepted candidate, including the CoreAudio files.
-The opt-in helper is idempotent for an exact application and rejects partially
-applied or subsequently modified provider sources before changing them.
+Supported signals: any SDR transfer with known primaries, and PQ or HLG. Luma
+and chroma coefficients come from the source primaries. PQ uses ST 2084 on a
+10,000-nit logarithmic axis; HLG uses the nominal 1,000-nit display with a fixed
+1.2 system gamma. ICC-tagged sources and other HDR transfers are rejected so
+the consumer can fall back to display-space scopes.
 
 ## API
 
-`aagedal-scopes <width>` accepts 64–1440. Protocol 1 returns:
+`aagedal-scopes <width> [<plots>] [<backend>] [<analysis>]`
 
-- `protocol`, `w`, `h`, `track-id`, `pts`, `primaries`, `transfer`, `peak-nits`,
-  `format="bgra-premultiplied"`, and `hardware-transfer`.
-- `waveform` and `parade`: tightly packed `w × h × 4` byte arrays.
-- `vectorscope`: tightly packed `h × h × 4` byte array.
+- `width`: 64–1440; plots are `w × h` with `h = round(w × 9/16)`, the
+  vectorscope `h × h`.
+- `plots`: `waveform`, `parade`, `vectorscope` joined with `+` (default: all).
+  Only requested plots are computed and returned.
+- `backend`: `auto` (default: GPU, else CPU), `gpu` or `cpu`.
+- `analysis`: longest edge of the analysis raster, 0 for the default (1920 on
+  the GPU, the plot width on the CPU). Never upscales.
 
-`h = round(w × 9/16)`. Images contain premultiplied BGRA8 diagnostic colors,
-intended for sRGB display. They are not source-pixel proof. Consumers must check
-all node types, exact payload lengths, metadata combinations, finite timestamps
-and active track identity before copying. Use `mpv_free_node_contents` normally.
+Protocol 2 result: `protocol`, `w`, `h`, `track-id`, `pts`, `primaries` and
+`transfer` (mpv's names, as in `video-params`, e.g. `bt.2020`/`pq`),
+`peak-nits`, `dolby-vision`, `backend` (`gpu`/`cpu`), `analysis-w`,
+`analysis-h`, `format="bgra-premultiplied"`, and a byte array per requested
+plot (`waveform`, `parade`, `vectorscope`). The command fails during pending
+seek/restart, stop or track replacement, and for unsupported signals. `pts`
+is media time like `time-pos`, also during `play-direction=backward` (mpv
+negates frame timestamps internally there). Changing direction seeks, so
+requests fail until playback has settled again.
 
-Input is the post-filter, pre-display-rendering video frame. The provider applies
-crop and orthogonal rotation/reflection to its analysis. It fails during pending
-seek/restart, stop/replacement, or unsupported representations. Dimensions are
-bounded before hardware download to 8192 per axis and 33,554,432 pixels. Analysis
-is sampled to the configured width; tiny excursions between samples can be
-missed. VideoToolbox download still occurs. GPU histogram computation is not
-implemented.
+Changes from protocol 1: plots and backend are selectable, color names follow
+mpv, `hardware-transfer` is gone (GPU frames are never transferred; CPU frames
+are mapped), and `backend`, `analysis-w/h` and `dolby-vision` are new. The
+consumer must check `protocol`, all node types and exact payload lengths.
 
-Supported signals are BT.709 SDR and BT.2020 PQ/HLG. PQ uses ST 2084 and a
-10,000-nit logarithmic axis. HLG retains the app's fixed 1.2 system gamma and
-1,000-nit peak assumption. Luma/chroma coefficients and UI targets must match
-primaries. The example consumer uses BT.2020 vectorscope targets for native HDR.
-ICC/Dolby Vision and other unsupported combinations fall back at the consumer.
+`aagedal-decoder-raster` (protocol 2, unchanged) still requires
+`--aagedal-decoder-raster=yes` and returns the paused decoder raster, with the
+properties `aagedal-decoder-raster-pts` and `aagedal-decoder-raster-version`.
+It also works when paused during backward playback; its `pts` is media time
+like `time-pos`. The cache sizes hardware frames with the shared
+`mp_image_approx_byte_size()` estimate (standard patch 0007, see
+[backward playback](../reverse-playback/README.md)).
 
-The application preserves its screenshot path for A/B display-space difference
-scopes, and AVPlayer outputs for ProRes RAW. These are separate consumer paths;
-a native source-signal scope should not silently replace display-space metrics.
+## Build
+
+Every build includes it: `Sources/BuildScripts/patch/libmpv/0009-native-scopes-and-decoder-raster.patch`
+is applied with the other mpv patches. This fork builds macOS for arm64 only.
+Releases are prepared with `scripts/rebuild-macos-audio.py` and
+`scripts/prepare-editor-release.py` (see the [editor helpers](../editor-helpers/README.md)).
+
+Unlike the 0.41 candidate, the patch carries no CoreAudio changes: mpv 0.42.0 fixed the channel-map
+handling upstream ("ao_coreaudio: remove misusage of audio unit channel map
+API"), and the init-failure cleanup is upstream too.
 
 ## Validation and performance
 
-The source-identical arm64 candidate was built in the Aagedal Media Player
-workspace before porting its patch into this branch. Receipts and numerical
-results are retained in [evidence-20261015](evidence-20261015/). On macOS 27.0.1:
+Evidence is in [evidence-20261112](evidence-20261112/), on an Apple M5 Pro,
+macOS 27.2, mpv 0.42.0, libplacebo 7.387.0, MoltenVK 1.4.2. The machine was
+under unrelated heavy load (load average above 20) during the runs, so timings
+are conservative.
 
-- 38 hosted scope/consumer tests pass without skips, covering typed/oversized
-  payload rejection, native SDR/PQ/HLG, all three plots, display-capture fallback
-  and return, and in-flight completion handling on stop.
-- The existing native-raster hosted test passes all 20 retained fixtures against
-  the new libmpv binary, including actual VideoToolbox decoding and seek/reuse/
-  resume revocation. The existing default-off provider gate stays intact.
-- Five independent lossless RGB16 signal fixtures verify every occupied waveform,
-  parade and vector bin, with one-bin tolerance for conversion/float boundaries.
-- Six UHD 60 fps runs cover SDR/PQ/HLG with software and actual VideoToolbox decode.
-  The three first-frame plots are byte-identical between hardware/software in
-  all three workloads. Playback PTS, accurate seek, unload and invalid-width
-  rejection pass.
-- 120 transfer/orientation/resolution math cases pass under ASan/UBSan. Sanitizer
-  coverage here is the new C math, not the entire mpv/FFmpeg/Metal lifecycle.
+- **Signal.** Five lossless RGB16 fixtures (SDR, PQ and HLG greys and color
+  bars) match independently computed bins for every occupied waveform, parade
+  and vectorscope pixel, within one bin, on both backends.
+- **GPU/CPU agreement** on UHD SDR/PQ/HLG video at the same 720-pixel analysis
+  raster: 76–85 % of waveform and 73–95 % of parade intensity is within one bin
+  of the other backend, 50–58 % for the vectorscope. The backends upsample
+  chroma differently (libplacebo as displayed, swscale for the fallback).
+- **Math.** 242 accumulation/paint cases (sizes, transfers, rotations, plot
+  masks, extreme values) pass under ASan/UBSan.
+- **Lifecycle.** Rejection before load, invalid width, single-plot and default
+  plot sets, PTS advancing during playback, accurate seek and stop.
+- **Decoder raster.** Software and actual VideoToolbox decoding give
+  byte-identical rasters for 8-bit SDR (NV12) and 10-bit PQ (P010). Rotations
+  of 90/180/270° and horizontal/vertical flips match the mapping exactly and are
+  byte-identical to FFmpeg's own auto-rotated decode.
 
-At width 720, native all-three-plot analysis averages **4.90–11.70 ms** in the six
-UHD runs; screenshot capture alone averages **29.32–33.51 ms**, before the app's
-scope computation. Calls are interleaved native first, screenshot second.
-The hosted UHD HLG app comparison at a 30 fps scope setting improves from
-**19.98 to 29.33 scope updates/s**, with fresh PTS for every captured update.
-These rates do not certify 60 fps display presentation or frame lock.
+- **Recipe.** A fresh checkout built the then opt-in recipe and the resulting
+  libmpv contained the new commands.
 
-For this branch specifically, the Swift build recipe compiles, invalid option
-combinations reject before dependency work, the combined patch applies through
-the current normal MPVKit patch sequence, and patch/idempotence/rejection plus
-sanitized math checks pass. The full dependency build was not repeated after
-adding the opt-in recipe wrapper; the provider's C source is unchanged from the
-accepted build. Long-duration/multi-viewer memory and thermal behavior, 8K
-performance, physical HDR calibration and general interlaced/filter workloads
-remain unqualified.
+Timings at plot width 720 on UHD 60 fps SDR/PQ/HLG (all three plots, mean of 30
+calls, [uhd-timing.json](evidence-20261112/uhd-timing.json)):
 
-## Repeat source checks
+| | GPU (1920 px analysis) | CPU (720 px analysis) | `screenshot-raw` alone |
+|---|---|---|---|
+| Paused, wall time | 1.9–3.3 ms | 6.2–11.9 ms | 14–21 ms |
+| Paused, process CPU time | 1.6–1.9 ms | 6.0–11.6 ms | |
+| Playing, wall time | 7.0–9.3 ms | 6.8–13.1 ms | 15–26 ms |
 
-Using a disposable upstream mpv v0.41.0 checkout, apply all existing
-`Sources/BuildScripts/patch/libmpv/*.patch` files in sorted order, then run:
+The GPU backend analyses about seven times as many samples for a fraction of the
+CPU time. During playback its latency is dominated by waiting for the VO thread
+to finish presenting the current frame, not by the analysis. The earlier 0.41
+CPU-only candidate measured 4.9–11.7 ms paused at 720 px.
 
-```sh
-python3 scripts/test-native-scopes.py /path/to/mpv
-```
+Decoder raster capture of an UHD frame: 1.7–2.1 ms for 8-bit SDR, 15–16 ms for
+10-bit PQ (RGBA64 conversion), 2.5–7.1 ms with rotation or flips
+([decoder-raster.json](evidence-20261112/decoder-raster.json)).
 
-Only a temporary copy is modified. This tests full patch application,
-idempotence, modified-source rejection, and the 120 sanitized math cases.
-`Tests/NativeScopes/mpv_scopes_harness.c` is the native client used for signal,
-lifecycle and timing runs. Compile as Objective-C with `-DSCOPE_GPU` for an
-interactive Metal surface; ordinary C uses the null VO/software path. Link it
-with this candidate's libmpv and the same FFmpeg/auxiliary libraries as the build.
+## Repeat checks
+
+Using a disposable upstream mpv v0.42.0 checkout with all
+`Sources/BuildScripts/patch/libmpv/*.patch` files applied in sorted order:
 
 ```sh
-python3 scripts/validate-native-scopes.py /path/to/client /tmp/new-scope-results \
-  --ffmpeg /path/to/ffmpeg
+python3 scripts/test-native-scopes.py /path/to/mpv \
+  --placebo-include dist/libplacebo/macos/thin/arm64/include
 ```
 
-The signal validator generates independent lossless RGB16 fixtures. The GPU
-client takes `INPUT OUTPUT_PREFIX HWDEC WIDTH [play]`; hardware validation must
-report an actual hardware transfer, not software fallback. Retain new source,
-binary checksums, fixtures and evidence for any future provider changes.
+This runs the sanitized math cases. `Tests/NativeScopes/mpv_scopes_harness.c` and
+`mpv_raster_harness.c` are native clients; compile them as Objective-C with
+`-DSCOPE_GPU` for gpu-next on a CAMetalLayer (needed for the GPU backend and for
+actual VideoToolbox frames), or as C for vo=null. Link them like the `mpv`
+executable of the candidate build. Then:
+
+```sh
+python3 scripts/validate-native-scopes.py /path/to/scopes-client /tmp/scope-results \
+  --ffmpeg /path/to/ffmpeg --compare uhd-sdr.mkv --compare uhd-pq.mkv
+```
+
+The scopes client takes `INPUT OUTPUT_PREFIX HWDEC WIDTH [play]`
+(`SCOPE_ANALYSIS` overrides the analysis edge); the raster client takes
+`INPUT OUTPUT HWDEC` and fails if requested hardware decoding falls back to
+software. With `SCOPE_BACKWARD=1` (scopes, with `play`) or `RASTER_BACKWARD=1`
+(raster) they also check backward playback: falling media-time PTS, and a
+paused backward raster byte-identical to the same frame reached forward.
+
+The [evidence-20261015](evidence-20261015/) directory documents the earlier mpv
+0.41.0 CPU-only candidate (protocol 1) and is kept for reference.

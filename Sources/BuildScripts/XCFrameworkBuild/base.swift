@@ -34,7 +34,6 @@ class ArgumentOptions {
     var enableDebug: Bool = false
     var enableSplitPlatform: Bool = false
     var enableGPL: Bool = false
-    var enableNativeScopes: Bool = false
     var platforms : [PlatformType] = []
     var releaseVersion: String = "0.0.0"
 
@@ -54,8 +53,6 @@ class ArgumentOptions {
         let options = ArgumentOptions(arguments: Array(arguments.dropFirst()))
         for argument in arguments {
             switch argument {
-            case "enable-native-scopes":
-                options.enableNativeScopes = true
             case "enable-debug":
                 options.enableDebug = true
             case "enable-gpl":
@@ -89,9 +86,6 @@ class ArgumentOptions {
             }
         }
 
-        if options.enableNativeScopes && (!options.enableGPL || options.platforms != [.macos]) {
-            throw NSError(domain: "Native scopes require enable-gpl platform=macos (arm64 development candidate)", code: 1)
-        }
         return options
     }
 }
@@ -224,7 +218,6 @@ class BaseBuild {
     }
 
     func architectures(_ platform: PlatformType) -> [ArchType] {
-        if BaseBuild.options.enableNativeScopes { return [.arm64] }
         return platform.architectures
     }
 
@@ -459,7 +452,7 @@ class BaseBuild {
         try? FileManager.default.removeItem(at: frameworkDir)
         try FileManager.default.createDirectory(at: frameworkDir, withIntermediateDirectories: true, attributes: nil)
         var arguments = ["-create"]
-        for arch in platform.architectures {
+        for arch in architectures(platform) {
             let prefix = thinDir(platform: platform, arch: arch)
             if !FileManager.default.fileExists(atPath: prefix.path) {
                 return nil
@@ -1117,12 +1110,8 @@ enum PlatformType: String, CaseIterable {
         case .isimulator, .tvsimulator:
             return [.arm64, .x86_64]  
         case .macos:
-            // macos 不能用arm64，不然打包release包会报错，不能通过
-            #if arch(x86_64)
-            return [.x86_64, .arm64]
-            #else
-            return [.arm64, .x86_64]
-            #endif
+            // This fork targets Apple Silicon only.
+            return [.arm64]
         case .maccatalyst:
             return [.arm64, .x86_64]
         }

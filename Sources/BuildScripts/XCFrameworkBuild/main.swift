@@ -51,7 +51,7 @@ enum Library: String, CaseIterable {
     var version: String {
         switch self {
         case .libmpv:
-            return "v0.41.0"
+            return "v0.42.0"
         case .FFmpeg:
             return "n9.0.2"
         case .openssl:
@@ -79,7 +79,7 @@ enum Library: String, CaseIterable {
         case .lcms2:
             return "2.17.0"
         case .libplacebo:
-            return "7.360.1"
+            return "7.387.0"
         case .libdovi:
             return "3.3.2"
         case .vulkan:
@@ -128,7 +128,7 @@ enum Library: String, CaseIterable {
         case .lcms2:
             return "https://github.com/mpvkit/lcms2-build/releases/download/\(self.version)/lcms2-all.zip"
         case .libplacebo:
-            return "https://github.com/mpvkit/libplacebo-build/releases/download/\(self.version)/libplacebo-all.zip"
+            return "https://github.com/aagedal/libplacebo-build/releases/download/\(self.version)/libplacebo-all.zip"
         case .libdav1d:
             return "https://github.com/mpvkit/libdav1d-build/releases/download/\(self.version)/libdav1d-all.zip"
         case .libdovi:
@@ -301,8 +301,8 @@ enum Library: String, CaseIterable {
             return  [
                 .target(
                     name: "Libplacebo",
-                    url: "https://github.com/mpvkit/libplacebo-build/releases/download/\(self.version)/Libplacebo.xcframework.zip",
-                    checksum: "https://github.com/mpvkit/libplacebo-build/releases/download/\(self.version)/Libplacebo.xcframework.checksum.txt"
+                    url: "https://github.com/aagedal/libplacebo-build/releases/download/\(self.version)/Libplacebo.xcframework.zip",
+                    checksum: "https://github.com/aagedal/libplacebo-build/releases/download/\(self.version)/Libplacebo.xcframework.checksum.txt"
                 ),
             ]
         case .libdav1d:
@@ -383,16 +383,6 @@ enum Library: String, CaseIterable {
 
 
 private class BuildMPV: BaseBuild {
-    override func beforeBuild() throws {
-        try super.beforeBuild()
-        if BaseBuild.options.enableNativeScopes {
-            let prepare = URL.currentDirectory + "../scripts/prepare-native-scopes.py"
-            try Utility.launch(path: "/usr/bin/env", arguments: ["python3", prepare.path, directoryURL.path])
-        } else if FileManager.default.fileExists(atPath: (directoryURL + "player/scope_provider.inc").path) {
-            throw NSError(domain: "Experimental native-scope sources require enable-native-scopes; use a fresh dist tree for a normal build", code: 1)
-        }
-    }
-
     init() {
         super.init(library: .libmpv)
     }
@@ -421,6 +411,11 @@ private class BuildMPV: BaseBuild {
             "-Djpeg=disabled",
             "-Dvapoursynth=disabled",
             "-Drubberband=disabled",
+            // New auto features in mpv 0.42; the host's libcurl.pc would otherwise leak into the build
+            "-Dlibcurl=disabled",
+            "-Dsubrandr=disabled",
+            "-Ddvda=disabled",
+            "-Damf=disabled",
         ]
         if BaseBuild.options.enableGPL {
             array.append("-Dgpl=true")

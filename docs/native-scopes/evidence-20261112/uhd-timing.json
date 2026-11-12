@@ -1,0 +1,474 @@
+{
+  "fixture": "testsrc2 3840x2160 60 fps; SDR H.264 8-bit, PQ/HLG HEVC 10-bit",
+  "width": 720,
+  "runs": [
+    {
+      "clip": "sdr",
+      "hwdec": "no",
+      "playing": false,
+      "gpu": {
+        "w": 720,
+        "h": 405,
+        "pts": 0.0,
+        "primaries": "bt.709",
+        "transfer": "bt.1886",
+        "peak": 100,
+        "analysisW": 1920,
+        "analysisH": 1080,
+        "dolbyVision": 0
+      },
+      "cpu": {
+        "w": 720,
+        "h": 405,
+        "pts": 0.0,
+        "primaries": "bt.709",
+        "transfer": "bt.1886",
+        "peak": 100,
+        "analysisW": 720,
+        "analysisH": 405,
+        "dolbyVision": 0
+      },
+      "timingMS": {
+        "gpu": 2.1062,
+        "gpuCPU": 1.6273,
+        "gpuWaveformOnly": 0.9446,
+        "cpu": 6.2225,
+        "cpuCPU": 6.0241,
+        "cpuWaveformOnly": 4.6974,
+        "screenshotOnly": 15.0331
+      },
+      "firstPTS": 0.0,
+      "lastPTS": 0.0,
+      "seekAndStop": true
+    },
+    {
+      "clip": "sdr",
+      "hwdec": "no",
+      "playing": true,
+      "gpu": {
+        "w": 720,
+        "h": 405,
+        "pts": 0.0,
+        "primaries": "bt.709",
+        "transfer": "bt.1886",
+        "peak": 100,
+        "analysisW": 1920,
+        "analysisH": 1080,
+        "dolbyVision": 0
+      },
+      "cpu": {
+        "w": 720,
+        "h": 405,
+        "pts": 0.0,
+        "primaries": "bt.709",
+        "transfer": "bt.1886",
+        "peak": 100,
+        "analysisW": 720,
+        "analysisH": 405,
+        "dolbyVision": 0
+      },
+      "timingMS": {
+        "gpu": 7.0247,
+        "gpuCPU": 12.5792,
+        "gpuWaveformOnly": 5.5997,
+        "cpu": 6.8141,
+        "cpuCPU": 15.0625,
+        "cpuWaveformOnly": 6.4521,
+        "screenshotOnly": 15.2865
+      },
+      "firstPTS": 0.033,
+      "lastPTS": 1.55,
+      "seekAndStop": true
+    },
+    {
+      "clip": "sdr",
+      "hwdec": "videotoolbox",
+      "playing": false,
+      "gpu": {
+        "w": 720,
+        "h": 405,
+        "pts": 0.0,
+        "primaries": "bt.709",
+        "transfer": "bt.1886",
+        "peak": 100,
+        "analysisW": 1920,
+        "analysisH": 1080,
+        "dolbyVision": 0
+      },
+      "cpu": {
+        "w": 720,
+        "h": 405,
+        "pts": 0.0,
+        "primaries": "bt.709",
+        "transfer": "bt.1886",
+        "peak": 100,
+        "analysisW": 720,
+        "analysisH": 405,
+        "dolbyVision": 0
+      },
+      "timingMS": {
+        "gpu": 1.8627,
+        "gpuCPU": 1.5625,
+        "gpuWaveformOnly": 1.081,
+        "cpu": 6.7515,
+        "cpuCPU": 6.5361,
+        "cpuWaveformOnly": 4.9376,
+        "screenshotOnly": 14.074
+      },
+      "firstPTS": 0.0,
+      "lastPTS": 0.0,
+      "seekAndStop": true
+    },
+    {
+      "clip": "sdr",
+      "hwdec": "videotoolbox",
+      "playing": true,
+      "gpu": {
+        "w": 720,
+        "h": 405,
+        "pts": 0.0,
+        "primaries": "bt.709",
+        "transfer": "bt.1886",
+        "peak": 100,
+        "analysisW": 1920,
+        "analysisH": 1080,
+        "dolbyVision": 0
+      },
+      "cpu": {
+        "w": 720,
+        "h": 405,
+        "pts": 0.0,
+        "primaries": "bt.709",
+        "transfer": "bt.1886",
+        "peak": 100,
+        "analysisW": 720,
+        "analysisH": 405,
+        "dolbyVision": 0
+      },
+      "timingMS": {
+        "gpu": 7.9376,
+        "gpuCPU": 6.1674,
+        "gpuWaveformOnly": 5.7139,
+        "cpu": 8.3787,
+        "cpuCPU": 9.192,
+        "cpuWaveformOnly": 5.6385,
+        "screenshotOnly": 16.7551
+      },
+      "firstPTS": 0.05,
+      "lastPTS": 1.633,
+      "seekAndStop": true
+    },
+    {
+      "clip": "pq",
+      "hwdec": "no",
+      "playing": false,
+      "gpu": {
+        "w": 720,
+        "h": 405,
+        "pts": 0.0,
+        "primaries": "bt.2020",
+        "transfer": "pq",
+        "peak": 10000,
+        "analysisW": 1920,
+        "analysisH": 1080,
+        "dolbyVision": 0
+      },
+      "cpu": {
+        "w": 720,
+        "h": 405,
+        "pts": 0.0,
+        "primaries": "bt.2020",
+        "transfer": "pq",
+        "peak": 10000,
+        "analysisW": 720,
+        "analysisH": 405,
+        "dolbyVision": 0
+      },
+      "timingMS": {
+        "gpu": 2.5422,
+        "gpuCPU": 1.8088,
+        "gpuWaveformOnly": 1.5135,
+        "cpu": 10.7658,
+        "cpuCPU": 10.4806,
+        "cpuWaveformOnly": 8.642,
+        "screenshotOnly": 20.8385
+      },
+      "firstPTS": 0.0,
+      "lastPTS": 0.0,
+      "seekAndStop": true
+    },
+    {
+      "clip": "pq",
+      "hwdec": "no",
+      "playing": true,
+      "gpu": {
+        "w": 720,
+        "h": 405,
+        "pts": 0.0,
+        "primaries": "bt.2020",
+        "transfer": "pq",
+        "peak": 10000,
+        "analysisW": 1920,
+        "analysisH": 1080,
+        "dolbyVision": 0
+      },
+      "cpu": {
+        "w": 720,
+        "h": 405,
+        "pts": 0.0,
+        "primaries": "bt.2020",
+        "transfer": "pq",
+        "peak": 10000,
+        "analysisW": 720,
+        "analysisH": 405,
+        "dolbyVision": 0
+      },
+      "timingMS": {
+        "gpu": 9.2951,
+        "gpuCPU": 25.1235,
+        "gpuWaveformOnly": 6.6712,
+        "cpu": 11.7204,
+        "cpuCPU": 33.9964,
+        "cpuWaveformOnly": 9.1631,
+        "screenshotOnly": 20.9171
+      },
+      "firstPTS": 0.05,
+      "lastPTS": 1.817,
+      "seekAndStop": true
+    },
+    {
+      "clip": "pq",
+      "hwdec": "videotoolbox",
+      "playing": false,
+      "gpu": {
+        "w": 720,
+        "h": 405,
+        "pts": 0.0,
+        "primaries": "bt.2020",
+        "transfer": "pq",
+        "peak": 10000,
+        "analysisW": 1920,
+        "analysisH": 1080,
+        "dolbyVision": 0
+      },
+      "cpu": {
+        "w": 720,
+        "h": 405,
+        "pts": 0.0,
+        "primaries": "bt.2020",
+        "transfer": "pq",
+        "peak": 10000,
+        "analysisW": 720,
+        "analysisH": 405,
+        "dolbyVision": 0
+      },
+      "timingMS": {
+        "gpu": 2.7863,
+        "gpuCPU": 1.8478,
+        "gpuWaveformOnly": 1.2731,
+        "cpu": 11.9205,
+        "cpuCPU": 11.5546,
+        "cpuWaveformOnly": 10.5932,
+        "screenshotOnly": 19.8009
+      },
+      "firstPTS": 0.0,
+      "lastPTS": 0.0,
+      "seekAndStop": true
+    },
+    {
+      "clip": "pq",
+      "hwdec": "videotoolbox",
+      "playing": true,
+      "gpu": {
+        "w": 720,
+        "h": 405,
+        "pts": 0.0,
+        "primaries": "bt.2020",
+        "transfer": "pq",
+        "peak": 10000,
+        "analysisW": 1920,
+        "analysisH": 1080,
+        "dolbyVision": 0
+      },
+      "cpu": {
+        "w": 720,
+        "h": 405,
+        "pts": 0.0,
+        "primaries": "bt.2020",
+        "transfer": "pq",
+        "peak": 10000,
+        "analysisW": 720,
+        "analysisH": 405,
+        "dolbyVision": 0
+      },
+      "timingMS": {
+        "gpu": 6.9793,
+        "gpuCPU": 7.0106,
+        "gpuWaveformOnly": 5.5108,
+        "cpu": 13.051,
+        "cpuCPU": 15.9505,
+        "cpuWaveformOnly": 10.4273,
+        "screenshotOnly": 22.4917
+      },
+      "firstPTS": 0.05,
+      "lastPTS": 1.767,
+      "seekAndStop": true
+    },
+    {
+      "clip": "hlg",
+      "hwdec": "no",
+      "playing": false,
+      "gpu": {
+        "w": 720,
+        "h": 405,
+        "pts": 0.0,
+        "primaries": "bt.2020",
+        "transfer": "hlg",
+        "peak": 1000,
+        "analysisW": 1920,
+        "analysisH": 1080,
+        "dolbyVision": 0
+      },
+      "cpu": {
+        "w": 720,
+        "h": 405,
+        "pts": 0.0,
+        "primaries": "bt.2020",
+        "transfer": "hlg",
+        "peak": 1000,
+        "analysisW": 720,
+        "analysisH": 405,
+        "dolbyVision": 0
+      },
+      "timingMS": {
+        "gpu": 3.3237,
+        "gpuCPU": 1.6677,
+        "gpuWaveformOnly": 1.5464,
+        "cpu": 10.4214,
+        "cpuCPU": 10.3449,
+        "cpuWaveformOnly": 8.9164,
+        "screenshotOnly": 20.2797
+      },
+      "firstPTS": 0.0,
+      "lastPTS": 0.0,
+      "seekAndStop": true
+    },
+    {
+      "clip": "hlg",
+      "hwdec": "no",
+      "playing": true,
+      "gpu": {
+        "w": 720,
+        "h": 405,
+        "pts": 0.0,
+        "primaries": "bt.2020",
+        "transfer": "hlg",
+        "peak": 1000,
+        "analysisW": 1920,
+        "analysisH": 1080,
+        "dolbyVision": 0
+      },
+      "cpu": {
+        "w": 720,
+        "h": 405,
+        "pts": 0.0,
+        "primaries": "bt.2020",
+        "transfer": "hlg",
+        "peak": 1000,
+        "analysisW": 720,
+        "analysisH": 405,
+        "dolbyVision": 0
+      },
+      "timingMS": {
+        "gpu": 8.0513,
+        "gpuCPU": 24.0212,
+        "gpuWaveformOnly": 5.5712,
+        "cpu": 11.1957,
+        "cpuCPU": 32.5996,
+        "cpuWaveformOnly": 8.7347,
+        "screenshotOnly": 22.8983
+      },
+      "firstPTS": 0.05,
+      "lastPTS": 1.75,
+      "seekAndStop": true
+    },
+    {
+      "clip": "hlg",
+      "hwdec": "videotoolbox",
+      "playing": false,
+      "gpu": {
+        "w": 720,
+        "h": 405,
+        "pts": 0.0,
+        "primaries": "bt.2020",
+        "transfer": "hlg",
+        "peak": 1000,
+        "analysisW": 1920,
+        "analysisH": 1080,
+        "dolbyVision": 0
+      },
+      "cpu": {
+        "w": 720,
+        "h": 405,
+        "pts": 0.0,
+        "primaries": "bt.2020",
+        "transfer": "hlg",
+        "peak": 1000,
+        "analysisW": 720,
+        "analysisH": 405,
+        "dolbyVision": 0
+      },
+      "timingMS": {
+        "gpu": 2.7385,
+        "gpuCPU": 1.5801,
+        "gpuWaveformOnly": 1.3357,
+        "cpu": 11.4702,
+        "cpuCPU": 11.3087,
+        "cpuWaveformOnly": 9.3374,
+        "screenshotOnly": 18.993
+      },
+      "firstPTS": 0.0,
+      "lastPTS": 0.0,
+      "seekAndStop": true
+    },
+    {
+      "clip": "hlg",
+      "hwdec": "videotoolbox",
+      "playing": true,
+      "gpu": {
+        "w": 720,
+        "h": 405,
+        "pts": 0.0,
+        "primaries": "bt.2020",
+        "transfer": "hlg",
+        "peak": 1000,
+        "analysisW": 1920,
+        "analysisH": 1080,
+        "dolbyVision": 0
+      },
+      "cpu": {
+        "w": 720,
+        "h": 405,
+        "pts": 0.0,
+        "primaries": "bt.2020",
+        "transfer": "hlg",
+        "peak": 1000,
+        "analysisW": 720,
+        "analysisH": 405,
+        "dolbyVision": 0
+      },
+      "timingMS": {
+        "gpu": 7.2962,
+        "gpuCPU": 7.0912,
+        "gpuWaveformOnly": 5.6059,
+        "cpu": 12.8428,
+        "cpuCPU": 15.6674,
+        "cpuWaveformOnly": 10.0733,
+        "screenshotOnly": 25.5642
+      },
+      "firstPTS": 0.033,
+      "lastPTS": 1.75,
+      "seekAndStop": true
+    }
+  ]
+}

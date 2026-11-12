@@ -1,0 +1,32 @@
+Subject: [PATCH] mp_image: count hardware surfaces in approximate byte size
+
+mp_image_approx_byte_size() only summed the AVBufferRefs, which for
+hardware frames such as VideoToolbox hold a pointer to the surface, not its
+pixels. The backward playback reversal queue, bounded by
+--video-reversal-buffer, therefore never limited hardware decoding: a single
+UHD GOP played backward held over 2 GB of IOSurfaces with a 1 GiB limit.
+Estimate hardware frames from their frames context instead.
+
+diff --git a/video/mp_image.c b/video/mp_image.c
+index a90c127..fef76d6 100644
+--- a/video/mp_image.c
++++ b/video/mp_image.c
+@@ -299,6 +299,18 @@ int mp_image_approx_byte_size(struct mp_image *img)
+ {
+     int total = sizeof(*img);
+ 
++    // Hardware surfaces keep their pixels outside the AVBufferRefs (e.g. a
++    // CVPixelBuffer behind a pointer-sized buffer). Estimate them from the
++    // frames context, or queues bounded by this size, such as the backward
++    // playback reversal queue, hold unbounded amounts of decoded video.
++    if (img->hwctx) {
++        AVHWFramesContext *fctx = (void *)img->hwctx->data;
++        int fmt = pixfmt2imgfmt(fctx->sw_format);
++        int size = fmt ? mp_image_get_alloc_size(fmt, fctx->width, fctx->height, 1) : -1;
++        if (size > 0)
++            return total + size;
++    }
++
+     for (int n = 0; n < MP_MAX_PLANES; n++) {
+         struct AVBufferRef *buf = img->bufs[n];
+         if (buf)

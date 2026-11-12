@@ -1,0 +1,33 @@
+{
+  "date": "2026-11-12",
+  "machine": "Apple M5 Pro, macOS 27.2 (load average above 20 from unrelated builds during all runs)",
+  "sources": {
+    "mpv": "v0.42.0 (b0841e8) + MPVKit patches 0001-0003, 0005, 0006",
+    "libplacebo": "7.387.0 (aagedal/libplacebo-build)",
+    "ffmpeg": "n9.0.2",
+    "moltenvk": "1.4.2"
+  },
+  "patch": {
+    "path": "Sources/BuildScripts/experimental/native-scopes/mpv-0.42.0-native-scopes.patch",
+    "sha256": "4d4c6d0b534ab6f87bef654ad2fdbed74137af50ebf3ea54822eea80f27ba9bd"
+  },
+  "freshRecipeBuild": {
+    "command": "make build enable-gpl platform=macos enable-native-scopes (fresh checkout)",
+    "result": "passed after fixing arm64-only framework creation in base.swift",
+    "libmpvSha256": "1f95f2d37226e0e62378d3eb7fff67cfd0885b9d914b2b5ddfa8bd56d85dd132",
+    "symbols": [
+      "cmd_aagedal_scopes",
+      "cmd_aagedal_decoder_raster",
+      "gpu_scopes_run",
+      "mp_scope_accumulate",
+      "mp_image_hw_map_or_download"
+    ]
+  },
+  "evidence": [
+    "signal-acceptance.json",
+    "uhd-timing.json",
+    "decoder-raster.json",
+    "math-sanitizers.txt",
+    "patch-and-math-tests.txt"
+  ]
+}

@@ -1,0 +1,5 @@
+NATIVE_SCOPE_MATH_ACCEPTANCE: 242 accumulation/paint cases, ASan/UBSan
+Native scope source closure applies cleanly.
+Applied native scopes (gpu-next compute and CPU fallback) and the default-off decoder raster.
+Native scope source closure already applied.
+NATIVE_SCOPE_PATCH_ACCEPTANCE: apply/check/idempotence/modified-source rejection passed

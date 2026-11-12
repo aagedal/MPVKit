@@ -1,0 +1,1911 @@
+Subject: [PATCH] Native video scopes and decoder raster
+
+aagedal-scopes (protocol 2): waveform, RGBY parade and vectorscope of the
+presented frame, computed with libplacebo compute shaders in vo_gpu_next and
+with a CPU fallback for other VOs. aagedal-decoder-raster (protocol 2): the
+paused decoder raster for pixel-exact inspection, opt-in with
+--aagedal-decoder-raster. See docs/native-scopes/README.md.
+
+diff --git a/common/av_common.c b/common/av_common.c
+index b3ca3d3..be58114 100644
+--- a/common/av_common.c
++++ b/common/av_common.c
+@@ -437,3 +437,17 @@ void mp_codec_info_from_avcodecpar(const AVCodecParameters *avcodecpar, struct m
+     if (!c->codec_profile)
+         c->codec_profile = avcodec_profile_name(avcodecpar->codec_id, avcodecpar->profile);
+ }
++
++bool mp_av_display_matrix_is_pixel_preserving(const int32_t *m)
++{
++    const int unit = 1 << 16;
++    int a = m[0], b = m[1], c = m[3], d = m[4];
++    // Whole-pixel orthogonal rotations/reflections and integral translation.
++    // No scale, shear, perspective, or truncated fractional rotation.
++    bool diagonal = (a == unit || a == -unit) && b == 0 && c == 0 &&
++                    (d == unit || d == -unit);
++    bool swapped = a == 0 && (b == unit || b == -unit) &&
++                   (c == unit || c == -unit) && d == 0;
++    return (diagonal || swapped) && m[2] == 0 && m[5] == 0 &&
++           m[8] == (1 << 30) && m[6] % unit == 0 && m[7] % unit == 0;
++}
+diff --git a/common/av_common.h b/common/av_common.h
+index 1947f68..5247b99 100644
+--- a/common/av_common.h
++++ b/common/av_common.h
+@@ -53,5 +53,6 @@ int mp_set_avopts_pos(struct mp_log *log, void *avobj, void *posargs, char **kv)
+ void mp_free_av_packet(AVPacket **pkt);
+ void mp_codec_info_from_av(const AVCodecContext *avctx, struct mp_codec_params *c);
+ void mp_codec_info_from_avcodecpar(const AVCodecParameters *avcodecpar, struct mp_codec_params *c);
++bool mp_av_display_matrix_is_pixel_preserving(const int32_t *matrix);
+ 
+ #endif
+diff --git a/demux/demux_lavf.c b/demux/demux_lavf.c
+index 1b9b087..b98642b 100644
+--- a/demux/demux_lavf.c
++++ b/demux/demux_lavf.c
+@@ -814,6 +814,11 @@ static void handle_new_stream(demuxer_t *demuxer, int i)
+ 
+         const uint8_t *sd = mp_av_stream_get_side_data(st, AV_PKT_DATA_DISPLAYMATRIX);
+         if (sd) {
++            const int32_t *matrix = (const int32_t *)sd;
++            sh->codec->aagedal_transform_invalid =
++                !mp_av_display_matrix_is_pixel_preserving(matrix);
++            sh->codec->aagedal_vflip = ((int64_t)matrix[0] * matrix[4] -
++                                        (int64_t)matrix[1] * matrix[3]) < 0;
+             double r = av_display_rotation_get((int32_t *)sd);
+             if (!isnan(r))
+                 sh->codec->rotate = (((int)(-r) % 360) + 360) % 360;
+diff --git a/demux/stheader.h b/demux/stheader.h
+index 18f274a..71c42ca 100644
+--- a/demux/stheader.h
++++ b/demux/stheader.h
+@@ -167,6 +167,7 @@ struct mp_codec_params {
+     int par_w, par_h;     // pixel aspect ratio (0 if unknown/square)
+     int disp_w, disp_h;   // display size
+     int rotate;           // intended display rotation, in degrees, [0, 359]
++    bool aagedal_vflip, aagedal_transform_invalid;
+     int stereo_mode;      // mp_stereo3d_mode (0 if none/unknown)
+     struct pl_color_space color; // colorspace info where available
+     struct pl_color_repr repr;   // color representation info where available
+diff --git a/filters/f_decoder_wrapper.c b/filters/f_decoder_wrapper.c
+index d50f8d8..99ac836 100644
+--- a/filters/f_decoder_wrapper.c
++++ b/filters/f_decoder_wrapper.c
+@@ -17,6 +17,7 @@
+ 
+ #include <float.h>
+ #include <stdio.h>
++#include <string.h>
+ #include <stdlib.h>
+ #include <stdbool.h>
+ #include <math.h>
+@@ -98,6 +99,7 @@ struct dec_wrapper_opts {
+     int aspect_method;
+     double fps_override;
+     bool correct_pts;
++    bool aagedal_decoder_raster;
+     int video_rotate;
+     char *audio_decoders;
+     char *video_decoders;
+@@ -113,6 +115,7 @@ static int decoder_list_help(struct mp_log *log, const m_option_t *opt,
+ 
+ const struct m_sub_options dec_wrapper_conf = {
+     .opts = (const struct m_option[]){
++        {"aagedal-decoder-raster", OPT_BOOL(aagedal_decoder_raster)},
+         {"correct-pts", OPT_BOOL(correct_pts)},
+         {"container-fps-override", OPT_DOUBLE(fps_override), M_RANGE(0, DBL_MAX)},
+         {"ad", OPT_STRING(audio_decoders),
+@@ -196,6 +199,13 @@ struct priv {
+ 
+     struct mp_image_params dec_format, last_format, fixed_format;
+ 
++    // Recent decoder outputs for aagedal-decoder-raster, newest first.
++    // Protected by cache_lock. Hardware surfaces are kept by reference.
++    struct mp_image *rasters[4];
++    int raster_bytes[4];
++    bool raster_have_pts, raster_pts_ambiguous;
++    double raster_last_pts;
++
+     double fps;
+ 
+     double start_pts;
+@@ -344,6 +354,9 @@ static void decf_reset(struct mp_filter *f)
+     p->last_format = p->fixed_format = (struct mp_image_params){0};
+ 
+     mp_mutex_lock(&p->cache_lock);
++    for (int n = 0; n < MP_ARRAY_SIZE(p->rasters); n++)
++        mp_image_unrefp(&p->rasters[n]);
++    p->raster_have_pts = p->raster_pts_ambiguous = false;
+     p->pts_reset = false;
+     p->attempt_framedrops = 0;
+     p->dropped_frames = 0;
+@@ -716,6 +729,12 @@ static void fix_image_params(struct priv *p,
+         m.rotate = (m.rotate + opts->video_rotate) % 360;
+     }
+ 
++    if (opts->aagedal_decoder_raster) {
++        if (!m.aagedal_has_display_matrix)
++            m.vflip = c->aagedal_vflip;
++        m.aagedal_transform_invalid |= c->aagedal_transform_invalid;
++    }
++
+     pl_color_space_merge(&m.color, &c->color);
+     pl_color_repr_merge(&m.repr, &c->repr);
+ 
+@@ -914,6 +933,86 @@ static void correct_audio_pts(struct priv *p, struct mp_aframe *aframe)
+         p->pts += frame_len;
+ }
+ 
++#define RASTER_MAX_DIM 4096
++#define RASTER_MAX_PIXELS 8847360
++#define RASTER_MAX_BYTES (72 * 1024 * 1024)
++#define RASTER_CACHE_BYTES (192 * 1024 * 1024)
++
++// Whether decoder output of this size is presented without crop, scaling or
++// timing reinterpretation, so that a cached raster is the presented frame.
++// Backward playback qualifies: frames leave the reversal queue with negated,
++// strictly increasing timestamps, the same time base as the core's video_pts.
++static bool raster_allowed(struct priv *p, int w, int h)
++{
++    const struct dec_wrapper_opts *o = p->opts;
++    const struct mp_image_params *f = &p->fixed_format;
++    return o->aagedal_decoder_raster && !f->aagedal_transform_invalid &&
++        f->rotate >= 0 && f->rotate < 360 && f->rotate % 90 == 0 &&
++        f->p_w > 0 && f->p_w == f->p_h &&
++        f->crop.x0 == 0 && f->crop.y0 == 0 && f->crop.x1 == w && f->crop.y1 == h &&
++        o->video_rotate == 0 && o->movie_aspect == -2 && o->aspect_method == 2 &&
++        o->correct_pts && o->fps_override == 0 &&
++        w > 0 && h > 0 && w <= RASTER_MAX_DIM && h <= RASTER_MAX_DIM &&
++        (int64_t)w * h <= RASTER_MAX_PIXELS;
++}
++
++// Memory a raster takes, including hardware surfaces, or -1 if unknown.
++static int raster_size(struct mp_image *mpi)
++{
++    if (IMGFMT_IS_HWACCEL(mpi->imgfmt) && !mpi->hwctx)
++        return -1;
++    return mp_image_approx_byte_size(mpi);
++}
++
++// Exact PTS association is only safe while decoder output is strictly
++// increasing. Ambiguity is remembered until reset, even after a duplicate
++// has fallen out of the ring.
++static void raster_track_pts(struct priv *p, double pts)
++{
++    mp_mutex_lock(&p->cache_lock);
++    if (!isfinite(pts) || (p->raster_have_pts && pts <= p->raster_last_pts))
++        p->raster_pts_ambiguous = true;
++    p->raster_have_pts = true;
++    p->raster_last_pts = pts;
++    if (p->raster_pts_ambiguous) {
++        for (int n = 0; n < MP_ARRAY_SIZE(p->rasters); n++)
++            mp_image_unrefp(&p->rasters[n]);
++    }
++    mp_mutex_unlock(&p->cache_lock);
++}
++
++static void raster_store(struct priv *p, struct mp_image *mpi)
++{
++    int bytes = raster_size(mpi);
++    if (bytes <= 0 || bytes > RASTER_MAX_BYTES)
++        return;
++
++    mp_mutex_lock(&p->cache_lock);
++    if (!p->raster_pts_ambiguous) {
++        const int n = MP_ARRAY_SIZE(p->rasters);
++        mp_image_unrefp(&p->rasters[n - 1]);
++        memmove(&p->rasters[1], &p->rasters[0], (n - 1) * sizeof(p->rasters[0]));
++        memmove(&p->raster_bytes[1], &p->raster_bytes[0], (n - 1) * sizeof(int));
++        p->rasters[0] = mp_image_new_ref(mpi);
++        p->raster_bytes[0] = p->rasters[0] ? bytes : 0;
++        if (p->rasters[0]) {
++            p->rasters[0]->params = p->fixed_format;
++            // Unspecified decoder PAR resolves to the established square pixels.
++            if (mpi->params.p_w == 0)
++                p->rasters[0]->params.p_w = p->rasters[0]->params.p_h = 1;
++        }
++        int total = 0;
++        for (int i = 0; i < n; i++)
++            total += p->raster_bytes[i];
++        for (int i = n - 1; i > 0 && total > RASTER_CACHE_BYTES; i--) {
++            total -= p->raster_bytes[i];
++            p->raster_bytes[i] = 0;
++            mp_image_unrefp(&p->rasters[i]);
++        }
++    }
++    mp_mutex_unlock(&p->cache_lock);
++}
++
+ static void process_output_frame(struct priv *p, struct mp_frame frame)
+ {
+     if (frame.type == MP_FRAME_VIDEO) {
+@@ -921,11 +1020,17 @@ static void process_output_frame(struct priv *p, struct mp_frame frame)
+ 
+         correct_video_pts(p, mpi);
+ 
++        if (p->opts->aagedal_decoder_raster)
++            raster_track_pts(p, mpi->pts);
++
+         if (!mp_image_params_equal(&p->last_format, &mpi->params)) {
+             fix_image_params(p, &mpi->params,
+                 mp_image_params_static_equal(&p->last_format, &mpi->params));
+         }
+ 
++        if (raster_allowed(p, mpi->w, mpi->h))
++            raster_store(p, mpi);
++
+         mpi->params = p->fixed_format;
+         mpi->nominal_fps = p->fps;
+     } else if (frame.type == MP_FRAME_AUDIO) {
+@@ -1302,6 +1407,8 @@ static void public_f_destroy(struct mp_filter *f)
+ 
+     talloc_free(p->dec_root_filter);
+     talloc_free(p->queue);
++    for (int n = 0; n < MP_ARRAY_SIZE(p->rasters); n++)
++        mp_image_unrefp(&p->rasters[n]);
+     mp_mutex_destroy(&p->cache_lock);
+ }
+ 
+@@ -1572,3 +1679,29 @@ void lavc_process(struct mp_filter *f, struct lavc_state *state,
+         mp_filter_internal_mark_progress(f);
+     }
+ }
++
++// Called by the core while paused. The decoder may still run ahead, so only
++// an unambiguous exact match of the presented PTS is returned, never the
++// newest frame.
++struct mp_image *mp_decoder_wrapper_source_raster(struct mp_decoder_wrapper *d,
++                                                  double pts)
++{
++    struct priv *p = d->f->priv;
++    thread_lock(p);
++    bool allowed = raster_allowed(p, p->fixed_format.w, p->fixed_format.h);
++    thread_unlock(p);
++    if (!allowed)
++        return NULL;
++
++    struct mp_image *result = NULL;
++    int matches = 0;
++    mp_mutex_lock(&p->cache_lock);
++    for (int n = 0; !p->raster_pts_ambiguous && n < MP_ARRAY_SIZE(p->rasters); n++) {
++        if (p->rasters[n] && p->rasters[n]->pts == pts && !matches++)
++            result = mp_image_new_ref(p->rasters[n]);
++    }
++    mp_mutex_unlock(&p->cache_lock);
++    if (matches != 1)
++        mp_image_unrefp(&result);
++    return result;
++}
+diff --git a/filters/f_decoder_wrapper.h b/filters/f_decoder_wrapper.h
+index b39d3f5..b90bb31 100644
+--- a/filters/f_decoder_wrapper.h
++++ b/filters/f_decoder_wrapper.h
+@@ -129,3 +129,7 @@ struct mp_decoder_list *select_spdif_codec(const char *codec, const char *pref);
+ 
+ // ad_dsd.c
+ struct mp_decoder_list *select_dsd_codec(const char *codec, const char *pref);
++
++// Decoder raster of the frame with exactly this PTS (--aagedal-decoder-raster).
++struct mp_image *mp_decoder_wrapper_source_raster(struct mp_decoder_wrapper *d,
++                                                  double pts);
+diff --git a/meson.build b/meson.build
+index 831fcae..8ab2817 100644
+--- a/meson.build
++++ b/meson.build
+@@ -178,6 +178,8 @@ sources = files(
+     'player/misc.c',
+     'player/osd.c',
+     'player/playloop.c',
++    'player/decoder_raster.c',
++    'player/scopes.c',
+     'player/screenshot.c',
+     'player/scripting.c',
+     'player/sub.c',
+@@ -231,6 +233,7 @@ sources = files(
+     'video/image_writer.c',
+     'video/img_format.c',
+     'video/mp_image.c',
++    'video/scope.c',
+     'video/mp_image_pool.c',
+     'video/out/aspect.c',
+     'video/out/bitmap_packer.c',
+@@ -269,6 +272,7 @@ sources = files(
+     'video/out/placebo/utils.c',
+     'video/out/vo_gpu_next.c',
+     'video/out/gpu_next/context.c',
++    'video/out/gpu_next/scopes.c',
+ 
+     ## osdep
+     'osdep/io.c',
+diff --git a/player/command.c b/player/command.c
+index 981fe47..d1a52b9 100644
+--- a/player/command.c
++++ b/player/command.c
+@@ -928,6 +928,21 @@ static int mp_property_playtime_remaining(void *ctx, struct m_property *prop,
+     return property_time(action, arg, remaining / speed);
+ }
+ 
++static int mp_property_aagedal_decoder_raster_pts(void *ctx,
++    struct m_property *prop, int action, void *arg)
++{
++    double pts = aagedal_decoder_raster_pts(ctx);
++    if (!isfinite(pts))
++        return M_PROPERTY_UNAVAILABLE;
++    return m_property_double_ro(action, arg, pts);
++}
++
++static int mp_property_aagedal_decoder_raster_version(void *ctx,
++    struct m_property *prop, int action, void *arg)
++{
++    return m_property_int_ro(action, arg, 2);
++}
++
+ static int mp_property_remaining_file_loops(void *ctx, struct m_property *prop,
+         int action, void *arg)
+ {
+@@ -4716,6 +4731,8 @@ static const struct m_property mp_properties_base[] = {
+     {"frame-drop-count", mp_property_frame_drop_vo},
+     {"vo-delayed-frame-count", mp_property_vo_delayed_frame_count},
+     {"percent-pos", mp_property_percent_pos},
++    {"aagedal-decoder-raster-pts", mp_property_aagedal_decoder_raster_pts},
++    {"aagedal-decoder-raster-version", mp_property_aagedal_decoder_raster_version},
+     {"time-pos", mp_property_time_pos},
+     {"time-remaining", mp_property_remaining},
+     {"audio-pts", mp_property_audio_pts},
+@@ -7881,6 +7898,21 @@ const struct mp_cmd_def mp_cmds[] = {
+         },
+         .spawn_thread = true,
+     },
++    { "aagedal-decoder-raster", cmd_aagedal_decoder_raster },
++    { "aagedal-scopes", cmd_aagedal_scopes,
++        {
++            {"width", OPT_INT(v.i), M_RANGE(64, 1440)},
++            {"plots", OPT_FLAGS(v.i,
++                {"waveform", 1}, {"parade", 2}, {"vectorscope", 4}),
++                OPTDEF_INT(7),
++                .flags = MP_CMD_OPT_ARG},
++            {"backend", OPT_CHOICE(v.i, {"auto", 0}, {"gpu", 1}, {"cpu", 2}),
++                .flags = MP_CMD_OPT_ARG},
++            {"analysis", OPT_INT(v.i), M_RANGE(0, 4096),
++                .flags = MP_CMD_OPT_ARG},
++        },
++        .spawn_thread = true,
++    },
+     { "screenshot-raw", cmd_screenshot_raw,
+         {
+             {"flags", OPT_CHOICE(v.i,
+diff --git a/player/decoder_raster.c b/player/decoder_raster.c
+new file mode 100644
+index 0000000..38c4d2b
+--- /dev/null
++++ b/player/decoder_raster.c
+@@ -0,0 +1,300 @@
++// Copyright © 2026 Truls Aagedal
++// SPDX-License-Identifier: GPL-3.0-or-later
++//
++// aagedal-decoder-raster (protocol 2): while paused, the decoder's own raster
++// of the presented frame converted to RGB on its native grid. Requires
++// --aagedal-decoder-raster, which keeps a few decoder output references.
++
++#include <math.h>
++#include <string.h>
++
++
++#include "mpv_talloc.h"
++#include "command.h"
++#include "core.h"
++#include "filters/f_decoder_wrapper.h"
++#include "input/cmd.h"
++#include "misc/node.h"
++#include "options/m_option.h"
++#include "options/options.h"
++#include "screenshot.h"
++#include "video/mp_image.h"
++#include "video/mp_image_pool.h"
++#include "video/sws_utils.h"
++
++#define MAX_RASTER_BYTES (72 * 1024 * 1024)
++
++// Source transfer/primaries the consumer can interpret, as protocol names.
++static bool color_encoding(struct mp_image *src, const char **primaries,
++                           const char **transfer)
++{
++    struct mp_image_params p = src->params;
++    if (src->icc_profile || src->dovi || p.repr.alpha == PL_ALPHA_PREMULTIPLIED)
++        return false;
++    switch (p.repr.sys) {
++    case PL_COLOR_SYSTEM_RGB:
++    case PL_COLOR_SYSTEM_BT_709:
++    case PL_COLOR_SYSTEM_BT_601:
++    case PL_COLOR_SYSTEM_BT_2020_NC:
++        break;
++    default:
++        return false;
++    }
++
++    *transfer = NULL;
++    if (p.color.primaries == PL_COLOR_PRIM_BT_709) {
++        *primaries = "bt709";
++        switch (p.color.transfer) {
++        case PL_COLOR_TRC_SRGB:     *transfer = "srgb"; break;
++        case PL_COLOR_TRC_BT_1886:  *transfer = "bt1886"; break;
++        case PL_COLOR_TRC_GAMMA22:  *transfer = "gamma22"; break;
++        case PL_COLOR_TRC_GAMMA24:  *transfer = "gamma24"; break;
++        default: break;
++        }
++    } else if (p.color.primaries == PL_COLOR_PRIM_BT_2020) {
++        *primaries = "bt2020";
++        switch (p.color.transfer) {
++        case PL_COLOR_TRC_PQ:  *transfer = "pq"; break;
++        case PL_COLOR_TRC_HLG: *transfer = "hlg"; break;
++        default: break;
++        }
++    }
++    return *transfer;
++}
++
++// The cached decoder raster for the presented PTS, if playback state allows
++// an exact, unambiguous association.
++static struct mp_image *source_raster(struct MPContext *mpctx)
++{
++    struct track *track = mpctx->current_track[0][STREAM_VIDEO];
++    struct MPOpts *opts = mpctx->opts;
++    if (mpctx->stop_play != KEEP_PLAYING || !mpctx->restart_complete ||
++        mpctx->seek.type || mpctx->hrseek_active || !mpctx->paused ||
++        !track || !track->dec || opts->filter_opts->deinterlace != 0 ||
++        opts->vo->video_crop.xy_valid || opts->vo->video_crop.wh_valid ||
++        !isfinite(mpctx->video_pts) || mpctx->video_pts * mpctx->play_dir < 0 ||
++        (opts->vf_settings && opts->vf_settings[0].name))
++        return NULL;
++
++    struct mp_image *src = mp_decoder_wrapper_source_raster(track->dec, mpctx->video_pts);
++    if (!src)
++        return NULL;
++    struct mp_image_params sp = src->params;
++    const char *primaries, *transfer;
++    if (sp.aagedal_transform_invalid || sp.rotate < 0 || sp.rotate >= 360 ||
++        sp.rotate % 90 || sp.p_w != sp.p_h ||
++        sp.crop.x0 || sp.crop.y0 || sp.crop.x1 != src->w || sp.crop.y1 != src->h ||
++        sp.repr.bits.color_depth < 8 || sp.repr.bits.color_depth > 16 ||
++        !color_encoding(src, &primaries, &transfer))
++    {
++        talloc_free(src);
++        return NULL;
++    }
++    return src;
++}
++
++// Raster timestamps are in the core's time base, negated during backward
++// playback; consumers get media time like time-pos.
++static double media_time(struct MPContext *mpctx, double pts)
++{
++    return pts * mpctx->play_dir;
++}
++
++double aagedal_decoder_raster_pts(struct MPContext *mpctx)
++{
++    struct mp_image *src = source_raster(mpctx);
++    double pts = src ? media_time(mpctx, src->pts) : NAN;
++    talloc_free(src);
++    return pts;
++}
++
++// swscale's unscaled NV12 path rounds differently from planar 4:2:0, so split
++// the interleaved chroma (without resampling) to give hardware and software
++// decodes of the same stream the same RGB.
++static struct mp_image *nv12_to_420p(struct mp_image *src)
++{
++    struct mp_image *dst = mp_image_alloc(IMGFMT_420P, src->w, src->h);
++    if (!dst)
++        return NULL;
++    mp_image_copy_attributes(dst, src);
++    memcpy_pic(dst->planes[0], src->planes[0], src->w, src->h,
++               dst->stride[0], src->stride[0]);
++    int cw = (src->w + 1) / 2, ch = (src->h + 1) / 2;
++    for (int y = 0; y < ch; y++) {
++        const uint8_t *uv = src->planes[1] + y * src->stride[1];
++        uint8_t *u = dst->planes[1] + y * dst->stride[1];
++        uint8_t *v = dst->planes[2] + y * dst->stride[2];
++        for (int x = 0; x < cw; x++) {
++            u[x] = uv[2 * x];
++            v[x] = uv[2 * x + 1];
++        }
++    }
++    return dst;
++}
++
++// Destination of source pixel (x, y) of a w x h image that is mirrored
++// vertically, then rotated clockwise.
++static inline void orient_pos(int rotation, bool mirrored, int w, int h,
++                              int x, int y, int *dx, int *dy)
++{
++    int fy = mirrored ? h - 1 - y : y;
++    switch (rotation) {
++    case 90:  *dx = h - 1 - fy; *dy = x; break;
++    case 180: *dx = w - 1 - x;  *dy = h - 1 - fy; break;
++    case 270: *dx = fy;         *dy = w - 1 - x; break;
++    default:  *dx = x;          *dy = fy; break;
++    }
++}
++
++#define ORIENT_TILE 32
++
++#define DEF_ORIENT(name, type)                                                 \
++static void name(struct mp_image *dst, struct mp_image *src, int rotation,      \
++                 bool mirrored)                                                 \
++{                                                                               \
++    int w = src->w, h = src->h;                                                 \
++    if (rotation == 180) {                                                      \
++        /* Whole rows, reversed. */                                             \
++        for (int y = 0; y < h; y++) {                                           \
++            const type *row = (const type *)(src->planes[0] + y * src->stride[0]);\
++            int dy = mirrored ? y : h - 1 - y;                                  \
++            type *out = (type *)(dst->planes[0] + dy * dst->stride[0]);         \
++            for (int x = 0; x < w; x++)                                         \
++                out[w - 1 - x] = row[x];                                        \
++        }                                                                       \
++        return;                                                                 \
++    }                                                                           \
++    for (int ty = 0; ty < h; ty += ORIENT_TILE) {                               \
++        for (int tx = 0; tx < w; tx += ORIENT_TILE) {                           \
++            int ex = MPMIN(tx + ORIENT_TILE, w), ey = MPMIN(ty + ORIENT_TILE, h);\
++            for (int y = ty; y < ey; y++) {                                     \
++                const type *row = (const type *)(src->planes[0] + y * src->stride[0]);\
++                for (int x = tx; x < ex; x++) {                                 \
++                    int dx, dy;                                                 \
++                    orient_pos(rotation, mirrored, w, h, x, y, &dx, &dy);       \
++                    ((type *)(dst->planes[0] + dy * dst->stride[0]))[dx] = row[x];\
++                }                                                               \
++            }                                                                   \
++        }                                                                       \
++    }                                                                           \
++}
++
++DEF_ORIENT(orient_32, uint32_t)
++DEF_ORIENT(orient_64, uint64_t)
++
++static struct mp_image *orient(struct mp_image *rgb, int rotation, bool mirrored,
++                               bool high_depth)
++{
++    bool swapped = rotation == 90 || rotation == 270;
++    struct mp_image *dst = mp_image_alloc(rgb->imgfmt, swapped ? rgb->h : rgb->w,
++                                          swapped ? rgb->w : rgb->h);
++    if (!dst)
++        return NULL;
++    mp_image_copy_attributes(dst, rgb);
++    dst->params.crop = (struct mp_rect){0, 0, dst->w, dst->h};
++    if (!rotation) {
++        // Pure mirror: whole rows.
++        for (int y = 0; y < rgb->h; y++) {
++            memcpy(dst->planes[0] + (rgb->h - 1 - y) * dst->stride[0],
++                   rgb->planes[0] + y * rgb->stride[0], rgb->w * (high_depth ? 8 : 4));
++        }
++    } else if (high_depth) {
++        orient_64(dst, rgb, rotation, mirrored);
++    } else {
++        orient_32(dst, rgb, rotation, mirrored);
++    }
++    return dst;
++}
++
++void cmd_aagedal_decoder_raster(void *p)
++{
++    struct mp_cmd_ctx *cmd = p;
++    struct MPContext *mpctx = cmd->mpctx;
++    struct track *track = mpctx->current_track[0][STREAM_VIDEO];
++    struct mp_image *rgb = NULL;
++    cmd->success = false;
++
++    struct mp_image *src = source_raster(mpctx);
++    if (!src)
++        return;
++    const char *primaries, *transfer;
++    if (!color_encoding(src, &primaries, &transfer))
++        goto done;
++    int source_depth = src->params.repr.bits.color_depth;
++
++    bool hardware = IMGFMT_IS_HWACCEL(src->imgfmt);
++    if (hardware) {
++        int w = src->w, h = src->h;
++        struct mp_image *sw = mp_image_hw_map_or_download(src);
++        if (!sw)
++            goto done;
++        talloc_free(src);
++        src = sw;
++        if (src->w != w || src->h != h || IMGFMT_IS_HWACCEL(src->imgfmt) ||
++            mp_image_approx_byte_size(src) <= 0 ||
++            mp_image_approx_byte_size(src) > MAX_RASTER_BYTES)
++            goto done;
++    }
++    if (src->imgfmt == IMGFMT_NV12) {
++        struct mp_image *planar = nv12_to_420p(src);
++        if (!planar)
++            goto done;
++        talloc_free(src);
++        src = planar;
++    }
++
++    bool high_depth = source_depth > 8 || !strcmp(transfer, "pq") ||
++                      !strcmp(transfer, "hlg");
++    int rotation = src->params.rotate;
++    bool mirrored = src->params.vflip;
++    rgb = mp_image_alloc(high_depth ? IMGFMT_RGBA64 : IMGFMT_BGRA, src->w, src->h);
++    if (!rgb)
++        goto done;
++    mp_image_copy_attributes(rgb, src);
++    rgb->params.p_w = rgb->params.p_h = 1;
++    rgb->params.rotate = 0;
++    rgb->params.vflip = false;
++    struct mp_sws_context *sws = mp_sws_alloc(NULL);
++    bool ok = mp_sws_scale(sws, rgb, src) >= 0;
++    talloc_free(sws);
++    if (!ok)
++        goto done;
++
++    if (rotation || mirrored) {
++        struct mp_image *oriented = orient(rgb, rotation, mirrored, high_depth);
++        if (!oriented)
++            goto done;
++        talloc_free(rgb);
++        rgb = oriented;
++    }
++    if (rgb->stride[0] <= 0 || (int64_t)rgb->stride[0] * rgb->h > MAX_RASTER_BYTES)
++        goto done;
++
++    struct mpv_node *res = &cmd->result;
++    node_init(res, MPV_FORMAT_NODE_MAP, NULL);
++    node_map_add_int64(res, "protocol", 2);
++    node_map_add_int64(res, "w", rgb->w);
++    node_map_add_int64(res, "h", rgb->h);
++    node_map_add_int64(res, "coded-w", src->w);
++    node_map_add_int64(res, "coded-h", src->h);
++    node_map_add_int64(res, "stride", rgb->stride[0]);
++    node_map_add_int64(res, "rotation", rotation);
++    node_map_add_int64(res, "track-id", track->user_tid);
++    node_map_add_int64(res, "source-bit-depth", source_depth);
++    node_map_add_double(res, "pts", media_time(mpctx, src->pts));
++    node_map_add_flag(res, "mirrored", mirrored);
++    node_map_add_flag(res, "hardware-transfer", hardware);
++    node_map_add_flag(res, "pixel-preserving", true);
++    node_map_add_flag(res, "presented-frame", true);
++    node_map_add_string(res, "primaries", primaries);
++    node_map_add_string(res, "transfer", transfer);
++    node_map_add_string(res, "format", high_depth ? "rgba64" : "bgra");
++    struct mpv_byte_array *ba = node_map_add(res, "data", MPV_FORMAT_BYTE_ARRAY)->u.ba;
++    *ba = (struct mpv_byte_array){rgb->planes[0], rgb->stride[0] * rgb->h};
++    talloc_steal(ba, rgb);
++    rgb = NULL;
++    cmd->success = true;
++done:
++    talloc_free(rgb);
++    talloc_free(src);
++}
+diff --git a/player/scopes.c b/player/scopes.c
+new file mode 100644
+index 0000000..e491d20
+--- /dev/null
++++ b/player/scopes.c
+@@ -0,0 +1,179 @@
++// Copyright © 2026 Truls Aagedal
++// SPDX-License-Identifier: GPL-3.0-or-later
++//
++// aagedal-scopes: waveform, RGBY parade and vectorscope of the presented frame.
++// The VO computes them on the GPU when it can (vo_gpu_next); otherwise the
++// current VO frame is analysed on the CPU with the core unlocked.
++
++#include <libswscale/swscale.h>
++
++#include "mpv_talloc.h"
++#include "command.h"
++#include "core.h"
++#include "input/cmd.h"
++#include "misc/node.h"
++#include "options/m_option.h"
++#include "screenshot.h"
++#include "video/csputils.h"
++#include "video/mp_image.h"
++#include "video/mp_image_pool.h"
++#include "video/out/vo.h"
++#include "video/scope.h"
++#include "video/sws_utils.h"
++
++enum { BACKEND_AUTO, BACKEND_GPU, BACKEND_CPU };
++
++static bool playback_settled(struct MPContext *mpctx, struct track *track)
++{
++    return track && track->dec && mpctx->current_track[0][STREAM_VIDEO] == track &&
++           mpctx->stop_play == KEEP_PLAYING && mpctx->restart_complete &&
++           !mpctx->seek.type && !mpctx->hrseek_active &&
++           mpctx->video_out && mpctx->video_out->config_ok;
++}
++
++static struct mp_scope_result *scopes_cpu(struct mp_image *src, int w, int plots,
++                                          int analysis)
++{
++    struct mp_scope_result *res = NULL;
++    struct mp_image *rgb = NULL;
++    struct mp_sws_context *sws = NULL;
++    uint32_t *bins = NULL;
++
++    if (IMGFMT_IS_HWACCEL(src->imgfmt)) {
++        struct mp_image *sw = mp_image_hw_map_or_download(src);
++        talloc_free(src);
++        src = sw;
++        if (!src)
++            goto done;
++    }
++    mp_image_params_guess_csp(&src->params);
++    struct mp_image_params *par = &src->params;
++    struct mp_scope_params sp;
++    if (src->icc_profile || src->dovi || par->repr.sys == PL_COLOR_SYSTEM_DOLBYVISION ||
++        par->rotate % 90 || !mp_scope_params_init(&sp, w, plots, &par->color))
++        goto done;
++
++    if (mp_image_crop_valid(par))
++        mp_image_crop_rc(src, par->crop);
++    // Analyse at the plot width by default; the CPU cost scales with samples.
++    int edge = analysis > 0 ? analysis : w;
++    int maxaxis = MPMAX(src->w, src->h);
++    double scale = MPMIN(1.0, edge / (double)maxaxis);
++    int aw = MPMAX(1, lrint(src->w * scale)), ah = MPMAX(1, lrint(src->h * scale));
++    if ((int64_t)aw * ah > MP_SCOPE_MAX_SAMPLES)
++        goto done;
++
++    rgb = mp_image_alloc(IMGFMT_RGBA64, aw, ah);
++    if (!rgb)
++        goto done;
++    mp_image_copy_attributes(rgb, src);
++    rgb->params.p_w = rgb->params.p_h = 1;
++    rgb->params.rotate = 0;
++    rgb->params.vflip = false;
++    // Area averaging of the encoded values, never tone mapped or clamped.
++    sws = mp_sws_alloc(NULL);
++    sws->flags = SWS_AREA;
++    if (mp_sws_scale(sws, rgb, src) < 0)
++        goto done;
++
++    struct mp_scope_layout l;
++    mp_scope_layout(&sp, &l);
++    bins = calloc(l.total, sizeof(*bins));
++    res = talloc_zero(NULL, struct mp_scope_result);
++    if (!bins || !res)
++        goto fail;
++    for (int i = 0; i < 3; i++) {
++        if (sp.plots & (1 << i))
++            res->plot[i] = talloc_zero_size(res, mp_scope_plot_size(&sp, i));
++    }
++    mp_scope_accumulate(&sp, bins, (const uint16_t *)rgb->planes[0], aw, ah,
++                        rgb->stride[0], par->rotate);
++    mp_scope_paint(&sp, bins, res->plot);
++
++    res->params = sp;
++    res->pts = src->pts;
++    res->primaries = m_opt_choice_str(pl_csp_prim_names, par->color.primaries);
++    res->transfer = m_opt_choice_str(pl_csp_trc_names, par->color.transfer);
++    bool swap = par->rotate == 90 || par->rotate == 270;
++    res->analysis_w = swap ? ah : aw;
++    res->analysis_h = swap ? aw : ah;
++    goto done;
++
++fail:
++    TA_FREEP(&res);
++done:
++    free(bins);
++    talloc_free(sws);
++    talloc_free(rgb);
++    talloc_free(src);
++    return res;
++}
++
++void cmd_aagedal_scopes(void *p)
++{
++    struct mp_cmd_ctx *cmd = p;
++    struct MPContext *mpctx = cmd->mpctx;
++    int w = cmd->args[0].v.i, plots = cmd->args[1].v.i;
++    int backend = cmd->args[2].v.i, analysis = cmd->args[3].v.i;
++    cmd->success = false;
++
++    struct track *track = mpctx->current_track[0][STREAM_VIDEO];
++    if (!plots || !playback_settled(mpctx, track))
++        return;
++    int track_id = track->user_tid;
++
++    struct mp_scope_result *res = NULL;
++    if (backend != BACKEND_CPU) {
++        struct voctrl_aagedal_scopes ctrl = {
++            .w = w,
++            .plots = plots,
++            .analysis = analysis,
++        };
++        if (vo_control(mpctx->video_out, VOCTRL_AAGEDAL_SCOPES, &ctrl) == VO_TRUE)
++            res = ctrl.res;
++    }
++    if (!res && backend != BACKEND_GPU) {
++        // The worker owns this frame reference while playback continues.
++        struct mp_image *src = vo_get_current_frame(mpctx->video_out);
++        if (src) {
++            mp_core_unlock(mpctx);
++            res = scopes_cpu(src, w, plots, analysis);
++            mp_core_lock(mpctx);
++        }
++    }
++    if (!res || !isfinite(res->pts) || !playback_settled(mpctx, track)) {
++        talloc_free(res);
++        return;
++    }
++    // Frame timestamps are negated during backward playback; report media
++    // time like time-pos. A direction change in between implies a seek, which
++    // playback_settled() rejects.
++    double pts = res->pts * mpctx->play_dir;
++
++    const struct mp_scope_params *sp = &res->params;
++    struct mpv_node *node = &cmd->result;
++    node_init(node, MPV_FORMAT_NODE_MAP, NULL);
++    node_map_add_int64(node, "protocol", 2);
++    node_map_add_int64(node, "w", sp->w);
++    node_map_add_int64(node, "h", sp->h);
++    node_map_add_int64(node, "track-id", track_id);
++    node_map_add_double(node, "pts", pts);
++    node_map_add_string(node, "primaries", res->primaries);
++    node_map_add_string(node, "transfer", res->transfer);
++    node_map_add_double(node, "peak-nits", sp->peak);
++    node_map_add_flag(node, "dolby-vision", res->dolby_vision);
++    node_map_add_string(node, "backend", res->gpu ? "gpu" : "cpu");
++    node_map_add_int64(node, "analysis-w", res->analysis_w);
++    node_map_add_int64(node, "analysis-h", res->analysis_h);
++    node_map_add_string(node, "format", "bgra-premultiplied");
++    static const char *const keys[] = {"waveform", "parade", "vectorscope"};
++    for (int i = 0; i < 3; i++) {
++        if (!res->plot[i])
++            continue;
++        struct mpv_byte_array *ba = node_map_add(node, keys[i], MPV_FORMAT_BYTE_ARRAY)->u.ba;
++        *ba = (struct mpv_byte_array){res->plot[i], mp_scope_plot_size(sp, i)};
++        talloc_steal(ba, res->plot[i]);
++    }
++    talloc_free(res);
++    cmd->success = true;
++}
+diff --git a/player/screenshot.h b/player/screenshot.h
+index 97abc79..458eed8 100644
+--- a/player/screenshot.h
++++ b/player/screenshot.h
+@@ -43,4 +43,9 @@ void cmd_screenshot(void *p);
+ void cmd_screenshot_to_file(void *p);
+ void cmd_screenshot_raw(void *p);
+ 
++// player/scopes.c, player/decoder_raster.c
++void cmd_aagedal_scopes(void *p);
++void cmd_aagedal_decoder_raster(void *p);
++double aagedal_decoder_raster_pts(struct MPContext *mpctx);
++
+ #endif /* MPLAYER_SCREENSHOT_H */
+diff --git a/video/mp_image.c b/video/mp_image.c
+index fef76d6..e5e3386 100644
+--- a/video/mp_image.c
++++ b/video/mp_image.c
+@@ -568,6 +568,8 @@ void mp_image_copy_attributes(struct mp_image *dst, struct mp_image *src)
+     dst->pkt_duration = src->pkt_duration;
+     dst->params.vflip = src->params.vflip;
+     dst->params.rotate = src->params.rotate;
++    dst->params.aagedal_has_display_matrix = src->params.aagedal_has_display_matrix;
++    dst->params.aagedal_transform_invalid = src->params.aagedal_transform_invalid;
+     dst->params.stereo3d = src->params.stereo3d;
+     dst->params.p_w = src->params.p_w;
+     dst->params.p_h = src->params.p_h;
+@@ -904,6 +906,8 @@ bool mp_image_params_equal(const struct mp_image_params *p1,
+            p1->chroma_location == p2->chroma_location &&
+            p1->vflip == p2->vflip &&
+            p1->rotate == p2->rotate &&
++           p1->aagedal_has_display_matrix == p2->aagedal_has_display_matrix &&
++           p1->aagedal_transform_invalid == p2->aagedal_transform_invalid &&
+            p1->stereo3d == p2->stereo3d &&
+            mp_rect_equals(&p1->crop, &p2->crop);
+ }
+@@ -1187,6 +1191,9 @@ struct mp_image *mp_image_from_av_frame(struct AVFrame *src)
+     sd = av_frame_get_side_data(src, AV_FRAME_DATA_DISPLAYMATRIX);
+     if (sd) {
+         int32_t *matrix = (int32_t *) sd->data;
++        dst->params.aagedal_has_display_matrix = true;
++        dst->params.aagedal_transform_invalid =
++            !mp_av_display_matrix_is_pixel_preserving(matrix);
+         // determinant
+         int vflip = ((int64_t)matrix[0] * (int64_t)matrix[4]
+                     - (int64_t)matrix[1] * (int64_t)matrix[3]) < 0;
+diff --git a/video/mp_image.h b/video/mp_image.h
+index f5c1562..a5bf2af 100644
+--- a/video/mp_image.h
++++ b/video/mp_image.h
+@@ -61,6 +61,7 @@ struct mp_image_params {
+     bool vflip;
+     // The image should be rotated clockwise (0-359 degrees).
+     int rotate;
++    bool aagedal_has_display_matrix, aagedal_transform_invalid;
+     enum mp_stereo3d_mode stereo3d; // image is encoded with this mode
+     struct mp_rect crop;        // crop applied on image
+     // Flags for f_enhancement_pair.c to not inherit flags from EL.
+diff --git a/video/mp_image_pool.c b/video/mp_image_pool.c
+index 0830bcd..7daac90 100644
+--- a/video/mp_image_pool.c
++++ b/video/mp_image_pool.c
+@@ -327,6 +327,28 @@ struct mp_image *mp_image_hw_download(struct mp_image *src,
+     return dst;
+ }
+ 
++// Like mp_image_hw_download(), but maps the surface read-only without a copy
++// where the hwcontext supports it (e.g. VideoToolbox). The mapping is held
++// until the returned image is freed.
++struct mp_image *mp_image_hw_map_or_download(struct mp_image *src)
++{
++    struct mp_image *dst = NULL;
++    AVFrame *srcav = mp_image_to_av_frame(src);
++    AVFrame *dstav = av_frame_alloc();
++    if (srcav && dstav) {
++        dstav->format = AV_PIX_FMT_NONE;
++        if (av_hwframe_map(dstav, srcav, AV_HWFRAME_MAP_READ) >= 0)
++            dst = mp_image_from_av_frame(dstav);
++    }
++    av_frame_free(&srcav);
++    av_frame_free(&dstav);
++    if (!dst)
++        return mp_image_hw_download(src, NULL);
++    mp_image_set_size(dst, src->w, src->h);
++    mp_image_copy_attributes(dst, src);
++    return dst;
++}
++
+ bool mp_image_hw_upload(struct mp_image *hw_img, struct mp_image *src)
+ {
+     if (hw_img->w != src->w || hw_img->h != src->h)
+diff --git a/video/mp_image_pool.h b/video/mp_image_pool.h
+index 8cb2a5f..32e1dd3 100644
+--- a/video/mp_image_pool.h
++++ b/video/mp_image_pool.h
+@@ -31,6 +31,8 @@ struct mp_image *mp_image_hw_download(struct mp_image *img,
+ 
+ int mp_image_hw_download_get_sw_format(struct mp_image *img);
+ 
++struct mp_image *mp_image_hw_map_or_download(struct mp_image *src);
++
+ bool mp_image_hw_upload(struct mp_image *hw_img, struct mp_image *src);
+ 
+ struct AVBufferRef;
+diff --git a/video/out/gpu_next/scopes.c b/video/out/gpu_next/scopes.c
+new file mode 100644
+index 0000000..1ba7808
+--- /dev/null
++++ b/video/out/gpu_next/scopes.c
+@@ -0,0 +1,389 @@
++// Copyright © 2026 Truls Aagedal
++// SPDX-License-Identifier: GPL-3.0-or-later
++//
++// GPU scope analysis: the current frame is rendered once into a small RGBA16
++// raster in its own encoding, then compute passes bin every sample with
++// atomics and paint the plots. Only the painted plots are read back. The
++// binning and painting mirror video/scope.c.
++
++#include <libplacebo/dispatch.h>
++#include <libplacebo/shaders/custom.h>
++
++#include "common/common.h"
++#include "mpv_talloc.h"
++#include "scopes.h"
++
++#define GROUP 256
++
++struct gpu_scopes {
++    pl_log log;
++    pl_gpu gpu;
++    pl_dispatch dp;
++    pl_tex src;
++    pl_buf bins;
++    pl_buf out;
++};
++
++struct gpu_scopes *gpu_scopes_create(void *ta_parent, pl_log log, pl_gpu gpu)
++{
++    if (!(gpu->glsl.compute) || !gpu->limits.max_ssbo_size)
++        return NULL;
++    struct gpu_scopes *s = talloc_zero(ta_parent, struct gpu_scopes);
++    s->log = log;
++    s->gpu = gpu;
++    s->dp = pl_dispatch_create(log, gpu);
++    return s;
++}
++
++void gpu_scopes_destroy(struct gpu_scopes **ps)
++{
++    struct gpu_scopes *s = *ps;
++    if (!s)
++        return;
++    pl_tex_destroy(s->gpu, &s->src);
++    pl_buf_destroy(s->gpu, &s->bins);
++    pl_buf_destroy(s->gpu, &s->out);
++    pl_dispatch_destroy(&s->dp);
++    talloc_free(s);
++    *ps = NULL;
++}
++
++// Constants and helpers shared by all passes. Literal values make each
++// configuration its own cached pipeline; configurations rarely change.
++static char *common_header(void *ta, const struct mp_scope_params *sp,
++                           const struct mp_scope_layout *l, int aw, int ah)
++{
++    return talloc_asprintf(ta,
++        "#define AW %d\n#define AH %d\n"
++        "#define PW %d\n#define PH %d\n#define CW %d\n"
++        "#define TF %d\n#define PLOTS %d\n#define COLOR_ONE %d\n"
++        "#define PEAK float(%.9g)\n"
++        "#define KR float(%.9g)\n#define KG float(%.9g)\n#define KB float(%.9g)\n"
++        "#define WAVE_OFF %zuu\n#define PARADE_OFF %zuu\n"
++        "#define VECTOR_OFF %zuu\n#define MAX_OFF %zuu\n"
++        "#define TOTAL %zuu\n"
++        "float scope_nits(float e) {\n"
++        "    if (e <= 0.0) return 0.0;\n"
++        "#if TF == 1\n"
++        "    float p = pow(e, 1.0 / 78.84375);\n"
++        "    return 10000.0 * pow(max(p - 0.8359375, 0.0) / (18.8515625 - 18.6875 * p),\n"
++        "                         1.0 / 0.1593017578125);\n"
++        "#elif TF == 2\n"
++        "    const float a = 0.17883277, b = 1.0 - 4.0 * a, c = 0.5 - a * log(4.0 * a);\n"
++        "    float scene = e <= 0.5 ? e * e / 3.0 : (exp((e - c) / a) + b) / 12.0;\n"
++        "    return PEAK * pow(scene, 1.2);\n"
++        "#else\n"
++        "    return e;\n"
++        "#endif\n"
++        "}\n"
++        "uint scope_level(float v) {\n"
++        "#if TF != 0\n"
++        "    const float log10e = 0.4342944819;\n"
++        "    v = (log(clamp(v, 0.1, PEAK)) * log10e + 1.0) / (log(PEAK) * log10e + 1.0);\n"
++        "#endif\n"
++        "    return uint(clamp(v, 0.0, 1.0) * float(PH - 1));\n"
++        "}\n"
++        // Linear invocation index over a 2D grid of 1D work groups.
++        "uint scope_index() {\n"
++        "    return gl_GlobalInvocationID.y * gl_NumWorkGroups.x * %du +\n"
++        "           gl_GlobalInvocationID.x;\n"
++        "}\n",
++        aw, ah, sp->w, sp->h, l->parade_w, (int)sp->transfer, sp->plots,
++        MP_SCOPE_COLOR_ONE, sp->peak, sp->kr, sp->kg, sp->kb,
++        l->wave, l->parade, l->vector, l->max, l->total, GROUP);
++}
++
++static struct pl_shader_desc buf_desc(void *ta, const char *name,
++                                      const char *var, pl_buf buf, size_t n,
++                                      enum pl_desc_access access)
++{
++    struct pl_buffer_var *bv = talloc_zero(ta, struct pl_buffer_var);
++    bv->var = (struct pl_var) {
++        .name = var,
++        .type = PL_VAR_UINT,
++        .dim_v = 1,
++        .dim_m = 1,
++        .dim_a = n,
++    };
++    bv->layout = pl_std430_layout(0, &bv->var);
++    return (struct pl_shader_desc) {
++        .desc = {
++            .name = name,
++            .type = PL_DESC_BUF_STORAGE,
++            .access = access,
++        },
++        .binding.object = buf,
++        .buffer_vars = bv,
++        .num_buffer_vars = 1,
++        .memory = PL_MEMORY_COHERENT,
++    };
++}
++
++static bool dispatch(struct gpu_scopes *s, const char *description,
++                     const char *header, const char *body,
++                     const struct pl_shader_desc *descs, int num_descs,
++                     int group_w, int group_h, size_t shmem, int gx, int gy)
++{
++    pl_shader sh = pl_dispatch_begin(s->dp);
++    bool ok = pl_shader_custom(sh, &(struct pl_custom_shader) {
++        .description = description,
++        .header = header,
++        .body = body,
++        .input = PL_SHADER_SIG_NONE,
++        .output = PL_SHADER_SIG_NONE,
++        .descriptors = descs,
++        .num_descriptors = num_descs,
++        .compute = true,
++        .compute_group_size = {group_w, group_h},
++        .compute_shmem = shmem,
++    });
++    if (!ok) {
++        pl_dispatch_abort(s->dp, &sh);
++        return false;
++    }
++    return pl_dispatch_compute(s->dp, pl_dispatch_compute_params(
++        .shader = &sh,
++        .dispatch_size = {gx, gy, 1},
++    ));
++}
++
++// Dispatch for n invocations in 1D groups of GROUP threads.
++static bool dispatch_1d(struct gpu_scopes *s, const char *description,
++                        const char *header, const char *body,
++                        const struct pl_shader_desc *descs, int num_descs,
++                        size_t shmem, size_t n)
++{
++    size_t groups = MPMAX((n + GROUP - 1) / GROUP, 1);
++    size_t gx = MPMIN(groups, s->gpu->limits.max_dispatch[0]);
++    size_t gy = (groups + gx - 1) / gx;
++    if (gy > s->gpu->limits.max_dispatch[1])
++        return false;
++    return dispatch(s, description, header, body, descs, num_descs,
++                    GROUP, 1, shmem, gx, gy);
++}
++
++static const char accumulate_body[] =
++    "ivec2 pos = ivec2(gl_GlobalInvocationID.xy);\n"
++    "if (pos.x < AW && pos.y < AH) {\n"
++    "    vec3 e = clamp(texelFetch(scope_src, pos, 0).rgb, 0.0, 1.0);\n"
++    "    vec3 v = vec3(scope_nits(e.r), scope_nits(e.g), scope_nits(e.b));\n"
++    "    uint ly = scope_level(KR * v.r + KG * v.g + KB * v.b);\n"
++    "#if PLOTS & 1\n"
++    "    {\n"
++    "        float norm = TF != 0 ? 1.0 / max(0.001, max(e.r, max(e.g, e.b))) : 1.0;\n"
++    "        uvec3 c = uvec3(clamp(e * norm, 0.0, 1.0) * float(COLOR_ONE) + 0.5);\n"
++    "        uint col = uint(pos.x) * uint(PW) / uint(AW);\n"
++    "        uint i = WAVE_OFF + ((uint(PH) - 1u - ly) * uint(PW) + col) * 4u;\n"
++    "        atomicAdd(scope_bins[i], 1u);\n"
++    "        atomicAdd(scope_bins[i + 1u], c.r);\n"
++    "        atomicAdd(scope_bins[i + 2u], c.g);\n"
++    "        atomicAdd(scope_bins[i + 3u], c.b);\n"
++    "    }\n"
++    "#endif\n"
++    "#if PLOTS & 2\n"
++    "    {\n"
++    "        uint col = PARADE_OFF + (uint(pos.x) * uint(CW) / uint(AW)) * uint(PH);\n"
++    "        atomicAdd(scope_bins[col + scope_level(v.r)], 1u);\n"
++    "        atomicAdd(scope_bins[col + uint(CW * PH) + scope_level(v.g)], 1u);\n"
++    "        atomicAdd(scope_bins[col + uint(2 * CW * PH) + scope_level(v.b)], 1u);\n"
++    "        atomicAdd(scope_bins[col + uint(3 * CW * PH) + ly], 1u);\n"
++    "    }\n"
++    "#endif\n"
++    "#if PLOTS & 4\n"
++    "    {\n"
++    "        float ye = KR * e.r + KG * e.g + KB * e.b;\n"
++    "        float cb = (e.b - ye) / (2.0 * (1.0 - KB));\n"
++    "        float cr = (e.r - ye) / (2.0 * (1.0 - KR));\n"
++    "        int vx = int(float(PH) / 2.0 + cb * float(PH) * 0.9);\n"
++    "        int vy = int(float(PH) / 2.0 - cr * float(PH) * 0.9);\n"
++    "        if (vx >= 0 && vx < PH && vy >= 0 && vy < PH) {\n"
++    "            uvec3 c = uvec3(e * float(COLOR_ONE) + 0.5);\n"
++    "            uint i = VECTOR_OFF + uint(vy * PH + vx) * 4u;\n"
++    "            atomicAdd(scope_bins[i], 1u);\n"
++    "            atomicAdd(scope_bins[i + 1u], c.r);\n"
++    "            atomicAdd(scope_bins[i + 2u], c.g);\n"
++    "            atomicAdd(scope_bins[i + 3u], c.b);\n"
++    "        }\n"
++    "    }\n"
++    "#endif\n"
++    "}\n";
++
++static const char clear_body[] =
++    "uint i = scope_index();\n"
++    "if (i < TOTAL) scope_bins[i] = 0u;\n";
++
++// Per work group maxima in shared memory, then one global atomic per group.
++static const char max_header[] = "shared uint scope_smax[3];\n";
++static const char max_body[] =
++    "uint lid = gl_LocalInvocationIndex;\n"
++    "if (lid < 3u) scope_smax[lid] = 0u;\n"
++    "memoryBarrierShared();\n"
++    "barrier();\n"
++    "uint i = scope_index();\n"
++    "const uint nw = uint(PW * PH), np = uint(4 * CW * PH), nv = uint(PH * PH);\n"
++    "if (i < nw)\n"
++    "    atomicMax(scope_smax[0], scope_bins[WAVE_OFF + i * 4u]);\n"
++    "else if (i < nw + np)\n"
++    "    atomicMax(scope_smax[1], scope_bins[PARADE_OFF + i - nw]);\n"
++    "else if (i < nw + np + nv)\n"
++    "    atomicMax(scope_smax[2], scope_bins[VECTOR_OFF + (i - nw - np) * 4u]);\n"
++    "memoryBarrierShared();\n"
++    "barrier();\n"
++    "if (lid < 3u && scope_smax[lid] > 0u)\n"
++    "    atomicMax(scope_bins[MAX_OFF + lid], scope_smax[lid]);\n";
++
++static const char paint_header[] =
++    "uint scope_pack(vec4 c) {\n"
++    "    uvec4 u = uvec4(c * 255.0);\n"
++    "    return u.b | (u.g << 8) | (u.r << 16) | (u.a << 24);\n"
++    "}\n"
++    "uint scope_paint(uint bin, uint maximum, bool vector) {\n"
++    "    uint count = scope_bins[bin];\n"
++    "    if (count == 0u) return 0u;\n"
++    "    vec3 rgb = vec3(scope_bins[bin + 1u], scope_bins[bin + 2u], scope_bins[bin + 3u]) /\n"
++    "               (float(count) * float(COLOR_ONE));\n"
++    "    float gray = (rgb.r + rgb.g + rgb.b) / 3.0;\n"
++    "    vec3 d = abs(rgb - gray);\n"
++    "    float saturation = min(max(d.r, max(d.g, d.b)) / max(gray, 0.01) * 3.0, 1.0);\n"
++    "    rgb = max(gray + (rgb - gray) * (vector ? 2.0 : 2.5), vec3(vector ? 0.05 : 0.0));\n"
++    "    float mx = max(0.01, max(rgb.r, max(rgb.g, rgb.b)));\n"
++    "    float alpha = min(log2(1.0 + float(count)) / log2(1.0 + float(max(maximum, 1u))) *\n"
++    "                      (vector ? 3.0 : 2.5), 1.0);\n"
++    "    float mixf = vector ? 1.0 : saturation;\n"
++    "    vec3 c = (rgb / mx * mixf + 1.0 - mixf) * alpha;\n"
++    "    return scope_pack(vec4(c, vector ? 1.0 : alpha));\n"
++    "}\n"
++    "uint scope_parade(uint x, uint row) {\n"
++    "    uint c = x / uint(CW + 2), px = x % uint(CW + 2);\n"
++    "    if (c >= 4u || px >= uint(CW)) return 0u;\n"
++    "    uint count = scope_bins[PARADE_OFF + (c * uint(CW) + px) * uint(PH) +\n"
++    "                            uint(PH) - 1u - row];\n"
++    "    if (count == 0u) return 0u;\n"
++    "    const vec3 colors[4] = vec3[4](vec3(1.0, 0.2, 0.2), vec3(0.2, 1.0, 0.2),\n"
++    "                                   vec3(0.3, 0.4, 1.0), vec3(0.85, 0.85, 0.85));\n"
++    "    float v = min(float(count) * 4.0 / float(max(scope_bins[MAX_OFF + 1u], 1u)), 1.0);\n"
++    "    return scope_pack(vec4(colors[c] * v, 1.0));\n"
++    "}\n";
++
++// The output holds the requested plots back to back, one uint per pixel.
++static const char paint_body[] =
++    "uint i = scope_index();\n"
++    "uint o = i;\n"
++    "const uint n = uint(PW * PH), nv = uint(PH * PH);\n"
++    "#if PLOTS & 1\n"
++    "if (i < n) { scope_out[o] = scope_paint(WAVE_OFF + i * 4u, scope_bins[MAX_OFF], false); return; }\n"
++    "i -= n;\n"
++    "#endif\n"
++    "#if PLOTS & 2\n"
++    "if (i < n) { scope_out[o] = scope_parade(i % uint(PW), i / uint(PW)); return; }\n"
++    "i -= n;\n"
++    "#endif\n"
++    "#if PLOTS & 4\n"
++    "if (i < nv) scope_out[o] = scope_paint(VECTOR_OFF + i * 4u, scope_bins[MAX_OFF + 2u], true);\n"
++    "#endif\n";
++
++bool gpu_scopes_run(struct gpu_scopes *s, pl_renderer rr,
++                    const struct pl_frame *image,
++                    const struct pl_color_space *color,
++                    const struct mp_scope_params *sp, int aw, int ah,
++                    uint8_t *plot[3])
++{
++    pl_gpu gpu = s->gpu;
++    if (aw < 1 || ah < 1 || (int64_t)aw * ah > MP_SCOPE_MAX_SAMPLES ||
++        aw > gpu->limits.max_tex_2d_dim || ah > gpu->limits.max_tex_2d_dim)
++        return false;
++
++    struct mp_scope_layout l;
++    mp_scope_layout(sp, &l);
++    size_t out_size[3], out_total = 0;
++    for (int i = 0; i < 3; i++) {
++        out_size[i] = sp->plots & (1 << i) ? mp_scope_plot_size(sp, i) / 4 : 0;
++        out_total += out_size[i];
++    }
++    if (l.total * 4 > gpu->limits.max_ssbo_size ||
++        out_total * 4 > gpu->limits.max_ssbo_size)
++        return false;
++
++    pl_fmt fmt = pl_find_fmt(gpu, PL_FMT_UNORM, 4, 16, 16,
++                             PL_FMT_CAP_RENDERABLE | PL_FMT_CAP_SAMPLEABLE);
++    bool ok = fmt &&
++        pl_tex_recreate(gpu, &s->src, pl_tex_params(
++            .w = aw,
++            .h = ah,
++            .format = fmt,
++            .renderable = true,
++            .sampleable = true,
++        )) &&
++        pl_buf_recreate(gpu, &s->bins, pl_buf_params(
++            .size = l.total * 4,
++            .storable = true,
++        )) &&
++        pl_buf_recreate(gpu, &s->out, pl_buf_params(
++            .size = out_total * 4,
++            .storable = true,
++            .host_readable = true,
++        ));
++    if (!ok)
++        return false;
++
++    // Same color space in and out: libplacebo only decodes, crops, rotates and
++    // averages, keeping the encoded signal values.
++    struct pl_frame target = {
++        .num_planes = 1,
++        .planes[0] = {
++            .texture = s->src,
++            .components = 4,
++            .component_mapping = {0, 1, 2, 3},
++        },
++        .repr = pl_color_repr_rgb,
++        .color = *color,
++    };
++    struct pl_render_params params = pl_render_fast_params;
++    params.downscaler = &pl_filter_box;
++    params.disable_linear_scaling = true;
++    params.skip_caching_single_frame = true;
++    if (!pl_render_image(rr, image, &target, &params))
++        return false;
++
++    void *ta = talloc_new(NULL);
++    char *header = common_header(ta, sp, &l, aw, ah);
++    struct pl_shader_desc bins_rw = buf_desc(ta, "scope_bins_buf", "scope_bins",
++                                             s->bins, l.total,
++                                             PL_DESC_ACCESS_READWRITE);
++    struct pl_shader_desc accumulate[2] = {
++        {
++            .desc = { .name = "scope_src", .type = PL_DESC_SAMPLED_TEX },
++            .binding = {
++                .object = s->src,
++                .sample_mode = PL_TEX_SAMPLE_NEAREST,
++            },
++        },
++        bins_rw,
++    };
++    struct pl_shader_desc paint[2] = {
++        buf_desc(ta, "scope_bins_buf", "scope_bins", s->bins, l.total,
++                 PL_DESC_ACCESS_READONLY),
++        buf_desc(ta, "scope_out_buf", "scope_out", s->out, out_total,
++                 PL_DESC_ACCESS_WRITEONLY),
++    };
++
++    ok = dispatch_1d(s, "scope clear", header, clear_body, &bins_rw, 1, 0, l.total) &&
++         dispatch(s, "scope accumulate", header, accumulate_body, accumulate, 2,
++                  16, 16, 0, (aw + 15) / 16, (ah + 15) / 16) &&
++         dispatch_1d(s, "scope max", talloc_asprintf(ta, "%s%s", header, max_header),
++                     max_body, &bins_rw, 1, sizeof(uint32_t[3]),
++                     (size_t)sp->w * sp->h + 4 * l.parade_w * sp->h +
++                     (size_t)sp->h * sp->h) &&
++         dispatch_1d(s, "scope paint", talloc_asprintf(ta, "%s%s", header, paint_header),
++                     paint_body, paint, 2, 0, out_total);
++
++    size_t offset = 0;
++    for (int i = 0; ok && i < 3; i++) {
++        if (!out_size[i])
++            continue;
++        ok = pl_buf_read(gpu, s->out, offset * 4, plot[i], out_size[i] * 4);
++        offset += out_size[i];
++    }
++    talloc_free(ta);
++    return ok;
++}
+diff --git a/video/out/gpu_next/scopes.h b/video/out/gpu_next/scopes.h
+new file mode 100644
+index 0000000..6389e7e
+--- /dev/null
++++ b/video/out/gpu_next/scopes.h
+@@ -0,0 +1,22 @@
++// Copyright © 2026 Truls Aagedal
++// SPDX-License-Identifier: GPL-3.0-or-later
++
++#pragma once
++
++#include <libplacebo/renderer.h>
++
++#include "video/scope.h"
++
++struct gpu_scopes;
++
++struct gpu_scopes *gpu_scopes_create(void *ta_parent, pl_log log, pl_gpu gpu);
++void gpu_scopes_destroy(struct gpu_scopes **s);
++
++// Renders `image` without color conversion into an aw x ah analysis raster
++// encoded in `color`, then bins and paints it on the GPU. Writes each plot
++// requested in `sp` into the corresponding (preallocated) `plot` buffer.
++bool gpu_scopes_run(struct gpu_scopes *s, pl_renderer rr,
++                    const struct pl_frame *image,
++                    const struct pl_color_space *color,
++                    const struct mp_scope_params *sp, int aw, int ah,
++                    uint8_t *plot[3]);
+diff --git a/video/out/vo.h b/video/out/vo.h
+index f24918d..a75ff67 100644
+--- a/video/out/vo.h
++++ b/video/out/vo.h
+@@ -133,6 +133,9 @@ enum mp_voctrl {
+     // Clipboard
+     VOCTRL_GET_CLIPBOARD,               // struct voctrl_clipboard*
+     VOCTRL_SET_CLIPBOARD,
++
++    // Waveform/parade/vectorscope of the current frame, computed by the VO.
++    VOCTRL_AAGEDAL_SCOPES,              // struct voctrl_aagedal_scopes*
+ };
+ 
+ // Helper to expose what kind of content is currently playing to the VO.
+@@ -184,6 +187,12 @@ struct voctrl_screenshot {
+     struct mp_image *res;
+ };
+ 
++struct voctrl_aagedal_scopes {
++    int w, plots;   // plot width and MP_SCOPE_* mask
++    int analysis;   // longest edge of the analysis raster, 0 for default
++    struct mp_scope_result *res; // set on success, talloc'ed
++};
++
+ struct voctrl_clipboard {
+     struct clipboard_data data;
+     struct clipboard_access_params params;
+diff --git a/video/out/vo_gpu_next.c b/video/out/vo_gpu_next.c
+index b6d6930..343b7cc 100644
+--- a/video/out/vo_gpu_next.c
++++ b/video/out/vo_gpu_next.c
+@@ -50,6 +50,7 @@
+ #include "gpu/video_shaders.h"
+ #include "sub/osd.h"
+ #include "gpu_next/context.h"
++#include "gpu_next/scopes.h"
+ 
+ #if HAVE_GL && defined(PL_HAVE_OPENGL)
+ #include <libplacebo/opengl.h>
+@@ -159,6 +160,7 @@ struct priv {
+     int last_srgb_power22;
+ 
+     pl_options pars;
++    struct gpu_scopes *scopes;
+     struct m_config_cache *opts_cache;
+     struct m_config_cache *next_opts_cache;
+     struct gl_next_opts *next_opts;
+@@ -2189,6 +2191,93 @@ static void update_ra_ctx_options(struct vo *vo, struct ra_ctx_opts *ctx_opts)
+                             border_alpha;
+ }
+ 
++#define SCOPE_DEFAULT_ANALYSIS 1920
++
++// Scopes of the frame a screenshot would capture, analysed in its own
++// encoding at up to `analysis` pixels along the longest displayed edge.
++static bool video_scopes(struct vo *vo, struct voctrl_aagedal_scopes *args)
++{
++    struct priv *p = vo->priv;
++    args->res = NULL;
++
++    struct pl_frame_mix mix;
++    struct pl_queue_params qparams = *pl_queue_params(
++        .pts = p->last_pts,
++        .drift_compensation = 0,
++    );
++    enum pl_queue_status status = pl_queue_update(p->queue, &mix, &qparams);
++    if (status == PL_QUEUE_ERR || status == PL_QUEUE_EOF || !mix.num_frames)
++        return false;
++
++    struct pl_frame image = *mix.frames[0];
++    struct mp_image *mpi = image.user_data;
++    // ICC tagged code values have no meaning on a standard scope axis.
++    if (image.profile.len)
++        return false;
++
++    // Dolby Vision is analysed after reshaping, as the PQ signal it decodes to.
++    bool dovi = image.repr.sys == PL_COLOR_SYSTEM_DOLBYVISION;
++    struct mp_image_params par = mpi->params;
++    mp_image_params_guess_csp(&par);
++    struct pl_color_space report = par.color, encode = image.color;
++    if (dovi) {
++        report = encode = (struct pl_color_space) {
++            .primaries = PL_COLOR_PRIM_BT_2020,
++            .transfer = PL_COLOR_TRC_PQ,
++            .hdr = image.color.hdr,
++        };
++    }
++
++    struct mp_scope_params sp;
++    if (!mp_scope_params_init(&sp, args->w, args->plots, &report))
++        return false;
++
++    int w, h;
++    mp_image_params_get_dsize(&mpi->params, &w, &h);
++    int src_w = mpi->params.w, src_h = mpi->params.h;
++    if (w < 1 || h < 1)
++        return false;
++    struct mp_rect src = {0, 0, src_w, src_h};
++    if (mp_image_crop_valid(&mpi->params))
++        src = mpi->params.crop;
++    if (mpi->params.rotate % 180 == 90) {
++        MPSWAP(int, w, h);
++        MPSWAP(int, src_w, src_h);
++    }
++    mp_rect_rotate(&src, src_w, src_h, mpi->params.rotate);
++    apply_crop(&image, src, mpi->params.w, mpi->params.h);
++
++    int edge = args->analysis > 0 ? args->analysis : SCOPE_DEFAULT_ANALYSIS;
++    double scale = MPMIN(1.0, edge / (double)MPMAX(w, h));
++    int aw = MPMAX(1, lrint(w * scale)), ah = MPMAX(1, lrint(h * scale));
++
++    if (!p->scopes)
++        p->scopes = gpu_scopes_create(p, p->pllog, p->gpu);
++    if (!p->scopes)
++        return false;
++
++    struct mp_scope_result *res = talloc_zero(NULL, struct mp_scope_result);
++    for (int i = 0; i < 3; i++) {
++        if (sp.plots & (1 << i))
++            res->plot[i] = talloc_size(res, mp_scope_plot_size(&sp, i));
++    }
++    if (!gpu_scopes_run(p->scopes, p->rr, &image, &encode, &sp, aw, ah, res->plot)) {
++        talloc_free(res);
++        return false;
++    }
++
++    res->params = sp;
++    res->pts = mpi->pts;
++    res->primaries = m_opt_choice_str(pl_csp_prim_names, report.primaries);
++    res->transfer = m_opt_choice_str(pl_csp_trc_names, report.transfer);
++    res->analysis_w = aw;
++    res->analysis_h = ah;
++    res->dolby_vision = dovi;
++    res->gpu = true;
++    args->res = res;
++    return true;
++}
++
+ static int control(struct vo *vo, uint32_t request, void *data)
+ {
+     struct priv *p = vo->priv;
+@@ -2245,6 +2334,9 @@ static int control(struct vo *vo, uint32_t request, void *data)
+         video_screenshot(vo, data);
+         return true;
+ 
++    case VOCTRL_AAGEDAL_SCOPES:
++        return video_scopes(vo, data) ? VO_TRUE : VO_FALSE;
++
+     case VOCTRL_EXTERNAL_RESIZE:
+         reconfig(vo, NULL);
+         return true;
+@@ -2485,6 +2577,7 @@ static void uninit(struct vo *vo)
+         pl_gpu_finish(p->gpu);
+ 
+     pl_queue_destroy(&p->queue); // destroy this first
++    gpu_scopes_destroy(&p->scopes);
+     for (int i = 0; i < MP_ARRAY_SIZE(p->osd_state.entries); i++)
+         pl_tex_destroy(p->gpu, &p->osd_state.entries[i].tex);
+     for (int i = 0; i < p->num_sub_tex; i++)
+diff --git a/video/scope.c b/video/scope.c
+new file mode 100644
+index 0000000..2ce163e
+--- /dev/null
++++ b/video/scope.c
+@@ -0,0 +1,267 @@
++// Copyright © 2026 Truls Aagedal
++// SPDX-License-Identifier: GPL-3.0-or-later
++
++#include <math.h>
++#include <stdlib.h>
++#include <string.h>
++
++#include "scope.h"
++
++// Standalone (no talloc/common.h) so the math can be tested in isolation.
++#define SCOPE_MAX(a, b) ((a) > (b) ? (a) : (b))
++
++// Lookup tables are indexed by the top 12 bits of each 16-bit sample.
++#define LUT_BITS 12
++#define LUT_SIZE (1 << LUT_BITS)
++
++bool mp_scope_params_init(struct mp_scope_params *sp, int w, int plots,
++                          const struct pl_color_space *color)
++{
++    if (w < MP_SCOPE_MIN_WIDTH || w > MP_SCOPE_MAX_WIDTH || !(plots & MP_SCOPE_ALL))
++        return false;
++
++    enum mp_scope_transfer transfer;
++    float peak;
++    switch (color->transfer) {
++    case PL_COLOR_TRC_UNKNOWN:
++        return false;
++    case PL_COLOR_TRC_PQ:
++        transfer = MP_SCOPE_PQ;
++        peak = 10000;
++        break;
++    case PL_COLOR_TRC_HLG:
++        // Display-referred HLG with the nominal 1000 nit reference display.
++        transfer = MP_SCOPE_HLG;
++        peak = 1000;
++        break;
++    default:
++        if (pl_color_transfer_is_hdr(color->transfer))
++            return false;
++        transfer = MP_SCOPE_SDR;
++        peak = 100;
++        break;
++    }
++
++    const struct pl_raw_primaries *raw = pl_raw_primaries_get(color->primaries);
++    if (color->primaries == PL_COLOR_PRIM_UNKNOWN || !raw)
++        return false;
++    pl_matrix3x3 rgb2xyz = pl_get_rgb2xyz_matrix(raw);
++
++    *sp = (struct mp_scope_params) {
++        .w = w,
++        .h = lround(w * 9.0 / 16),
++        .plots = plots & MP_SCOPE_ALL,
++        .transfer = transfer,
++        .peak = peak,
++        .kr = rgb2xyz.m[1][0],
++        .kg = rgb2xyz.m[1][1],
++        .kb = rgb2xyz.m[1][2],
++    };
++    return true;
++}
++
++void mp_scope_layout(const struct mp_scope_params *sp, struct mp_scope_layout *l)
++{
++    int w = sp->w, h = sp->h;
++    l->parade_w = (w - 6) / 4;
++    l->wave = 0;
++    l->parade = l->wave + (size_t)w * h * 4;
++    l->vector = l->parade + (size_t)l->parade_w * h * 4;
++    l->max = l->vector + (size_t)h * h * 4;
++    l->total = l->max + 3;
++}
++
++size_t mp_scope_plot_size(const struct mp_scope_params *sp, int plot)
++{
++    return (size_t)(plot == 2 ? sp->h : sp->w) * sp->h * 4;
++}
++
++static float scope_nits(const struct mp_scope_params *sp, float e)
++{
++    if (e <= 0)
++        return 0;
++    switch (sp->transfer) {
++    case MP_SCOPE_PQ: {
++        float p = powf(e, 1.0f / 78.84375f);
++        return 10000 * powf(fmaxf(p - 0.8359375f, 0) / (18.8515625f - 18.6875f * p),
++                            1.0f / 0.1593017578125f);
++    }
++    case MP_SCOPE_HLG: {
++        const float a = 0.17883277f, b = 1 - 4 * a, c = 0.5f - a * logf(4 * a);
++        float scene = e <= 0.5f ? e * e / 3 : (expf((e - c) / a) + b) / 12;
++        return sp->peak * powf(scene, 1.2f);
++    }
++    default:
++        return e;
++    }
++}
++
++static int scope_level(const struct mp_scope_params *sp, float v)
++{
++    float n = v;
++    if (sp->transfer != MP_SCOPE_SDR) {
++        n = (log10f(fmaxf(0.1f, fminf(v, sp->peak))) + 1) /
++            (log10f(sp->peak) + 1);
++    }
++    return fmaxf(0, fminf(n, 1)) * (sp->h - 1);
++}
++
++static uint32_t fixed_color(float c)
++{
++    return fmaxf(0, fminf(c, 1)) * MP_SCOPE_COLOR_ONE + 0.5f;
++}
++
++void mp_scope_accumulate(const struct mp_scope_params *sp, uint32_t *bins,
++                         const uint16_t *rgba, int w, int h, ptrdiff_t stride,
++                         int rotate)
++{
++    struct mp_scope_layout l;
++    mp_scope_layout(sp, &l);
++    const int pw = sp->w, ph = sp->h;
++    const bool wave = sp->plots & MP_SCOPE_WAVEFORM;
++    const bool parade = sp->plots & MP_SCOPE_PARADE;
++    const bool vector = sp->plots & MP_SCOPE_VECTORSCOPE;
++
++    // Values and levels per code value, so that the per-sample work is table
++    // lookups plus one luma level.
++    float value[LUT_SIZE];
++    uint16_t level[LUT_SIZE];
++    for (int i = 0; i < LUT_SIZE; i++) {
++        value[i] = scope_nits(sp, i / (float)(LUT_SIZE - 1));
++        level[i] = scope_level(sp, value[i]);
++    }
++
++    // Plot columns follow display columns. Vertical flips happen after
++    // rotation in display space and never move a sample between columns.
++    bool swap = rotate == 90 || rotate == 270;
++    int dw = swap ? h : w;
++    int *wave_col = malloc(sizeof(int) * dw * 2);
++    if (!wave_col)
++        return;
++    int *parade_col = wave_col + dw;
++    for (int x = 0; x < dw; x++) {
++        wave_col[x] = (int64_t)x * pw / dw;
++        parade_col[x] = (int64_t)x * l.parade_w / dw;
++    }
++
++    uint32_t *wave_bins = bins + l.wave, *parade_bins = bins + l.parade;
++    uint32_t *vector_bins = bins + l.vector;
++    const float scale = 1.0f / 65535;
++    for (int y = 0; y < h; y++) {
++        const uint16_t *row = (const uint16_t *)((const uint8_t *)rgba + y * stride);
++        for (int x = 0; x < w; x++) {
++            const uint16_t *p = &row[x * 4];
++            int dx = rotate == 90 ? h - 1 - y : rotate == 180 ? w - 1 - x :
++                     rotate == 270 ? y : x;
++            int ci[3] = { p[0] >> (16 - LUT_BITS), p[1] >> (16 - LUT_BITS),
++                          p[2] >> (16 - LUT_BITS) };
++            float r = p[0] * scale, g = p[1] * scale, b = p[2] * scale;
++            float luma = sp->kr * value[ci[0]] + sp->kg * value[ci[1]] +
++                         sp->kb * value[ci[2]];
++            int luma_level = scope_level(sp, luma);
++
++            if (wave) {
++                float norm = 1;
++                if (sp->transfer != MP_SCOPE_SDR)
++                    norm = 1 / fmaxf(0.001f, fmaxf(r, fmaxf(g, b)));
++                uint32_t *bin = &wave_bins[((ph - 1 - luma_level) * pw + wave_col[dx]) * 4];
++                bin[0] += 1;
++                bin[1] += fixed_color(r * norm);
++                bin[2] += fixed_color(g * norm);
++                bin[3] += fixed_color(b * norm);
++            }
++
++            if (parade) {
++                uint32_t *col = &parade_bins[parade_col[dx] * ph];
++                for (int c = 0; c < 3; c++)
++                    col[(c * l.parade_w) * ph + level[ci[c]]] += 1;
++                col[(3 * l.parade_w) * ph + luma_level] += 1;
++            }
++
++            if (vector) {
++                // Chroma of the encoded signal, matching the source primaries.
++                float y_e = sp->kr * r + sp->kg * g + sp->kb * b;
++                float cb = (b - y_e) / (2 * (1 - sp->kb));
++                float cr = (r - y_e) / (2 * (1 - sp->kr));
++                int vx = ph / 2.0f + cb * ph * 0.9f;
++                int vy = ph / 2.0f - cr * ph * 0.9f;
++                if (vx >= 0 && vx < ph && vy >= 0 && vy < ph) {
++                    uint32_t *bin = &vector_bins[(vy * ph + vx) * 4];
++                    bin[0] += 1;
++                    bin[1] += fixed_color(r);
++                    bin[2] += fixed_color(g);
++                    bin[3] += fixed_color(b);
++                }
++            }
++        }
++    }
++    free(wave_col);
++}
++
++// Saturation-boosted average color with log-scaled density as alpha.
++static void paint_bins(const uint32_t *bins, int n, uint8_t *out, bool vector)
++{
++    uint32_t maximum = 1;
++    for (int i = 0; i < n; i++)
++        maximum = SCOPE_MAX(maximum, bins[i * 4]);
++    float norm = log2f(1 + (float)maximum);
++    for (int i = 0; i < n; i++) {
++        const uint32_t *bin = &bins[i * 4];
++        if (!bin[0])
++            continue;
++        float k = 1.0f / ((float)bin[0] * MP_SCOPE_COLOR_ONE);
++        float r = bin[1] * k, g = bin[2] * k, b = bin[3] * k;
++        float gray = (r + g + b) / 3, boost = vector ? 2 : 2.5f;
++        float saturation = fminf(fmaxf(fabsf(r - gray), fmaxf(fabsf(g - gray), fabsf(b - gray))) /
++                                 fmaxf(gray, 0.01f) * 3, 1);
++        float floor = vector ? 0.05f : 0;
++        r = fmaxf(gray + (r - gray) * boost, floor);
++        g = fmaxf(gray + (g - gray) * boost, floor);
++        b = fmaxf(gray + (b - gray) * boost, floor);
++        float mx = fmaxf(0.01f, fmaxf(r, fmaxf(g, b)));
++        float alpha = fminf(log2f(1 + (float)bin[0]) / norm * (vector ? 3 : 2.5f), 1);
++        float mix = vector ? 1 : saturation;
++        out[4 * i + 0] = (b / mx * mix + 1 - mix) * alpha * 255;
++        out[4 * i + 1] = (g / mx * mix + 1 - mix) * alpha * 255;
++        out[4 * i + 2] = (r / mx * mix + 1 - mix) * alpha * 255;
++        out[4 * i + 3] = vector ? 255 : alpha * 255;
++    }
++}
++
++void mp_scope_paint(const struct mp_scope_params *sp, uint32_t *bins,
++                    uint8_t *plot[3])
++{
++    struct mp_scope_layout l;
++    mp_scope_layout(sp, &l);
++    int w = sp->w, h = sp->h;
++
++    if (plot[0])
++        paint_bins(bins + l.wave, w * h, plot[0], false);
++    if (plot[2])
++        paint_bins(bins + l.vector, h * h, plot[2], true);
++    if (plot[1]) {
++        const uint32_t *par = bins + l.parade;
++        size_t n = (size_t)l.parade_w * h * 4;
++        uint32_t maximum = 1;
++        for (size_t i = 0; i < n; i++)
++            maximum = SCOPE_MAX(maximum, par[i]);
++        static const float colors[4][3] = {
++            {1, .2, .2}, {.2, 1, .2}, {.3, .4, 1}, {.85, .85, .85},
++        };
++        for (int c = 0; c < 4; c++) {
++            for (int x = 0; x < l.parade_w; x++) {
++                for (int lv = 0; lv < h; lv++) {
++                    uint32_t count = par[(c * l.parade_w + x) * h + lv];
++                    if (!count)
++                        continue;
++                    float v = fminf(count * 4.0f / maximum, 1);
++                    uint8_t *px = &plot[1][((h - 1 - lv) * w + c * (l.parade_w + 2) + x) * 4];
++                    px[0] = colors[c][2] * v * 255;
++                    px[1] = colors[c][1] * v * 255;
++                    px[2] = colors[c][0] * v * 255;
++                    px[3] = 255;
++                }
++            }
++        }
++    }
++}
+diff --git a/video/scope.h b/video/scope.h
+new file mode 100644
+index 0000000..ad90b64
+--- /dev/null
++++ b/video/scope.h
+@@ -0,0 +1,79 @@
++// Copyright © 2026 Truls Aagedal
++// SPDX-License-Identifier: GPL-3.0-or-later
++//
++// Waveform, RGBY parade and vectorscope analysis of the encoded video signal.
++// The binning and painting rules are shared by the CPU path (scope.c) and the
++// gpu-next compute path (video/out/gpu_next/scopes.c), which must stay in sync.
++
++#pragma once
++
++#include <stdbool.h>
++#include <stddef.h>
++#include <stdint.h>
++
++#include <libplacebo/colorspace.h>
++
++enum {
++    MP_SCOPE_WAVEFORM    = 1 << 0,
++    MP_SCOPE_PARADE      = 1 << 1,
++    MP_SCOPE_VECTORSCOPE = 1 << 2,
++    MP_SCOPE_ALL         = (1 << 3) - 1,
++};
++
++enum mp_scope_transfer {
++    MP_SCOPE_SDR, // levels are encoded code values
++    MP_SCOPE_PQ,  // levels are log10 nits up to `peak`
++    MP_SCOPE_HLG,
++};
++
++#define MP_SCOPE_MIN_WIDTH 64
++#define MP_SCOPE_MAX_WIDTH 1440
++// Fixed-point scale of the per-bin color sums. 8 bits keeps the sums of a
++// 4096x4096 analysis grid within uint32_t.
++#define MP_SCOPE_COLOR_ONE 255
++#define MP_SCOPE_MAX_SAMPLES (4096 * 4096)
++
++struct mp_scope_params {
++    int w, h;       // waveform/parade size; vectorscope is h x h
++    int plots;      // MP_SCOPE_* mask
++    enum mp_scope_transfer transfer;
++    float peak;     // nits at the top of an HDR axis
++    float kr, kg, kb; // luma coefficients of the source primaries
++};
++
++// Bin layout, as uint32_t offsets into one array. Waveform and vectorscope bins
++// hold {count, r, g, b}, parade bins a count per (channel, column, level).
++struct mp_scope_layout {
++    int parade_w;   // width of one parade channel
++    size_t wave, parade, vector, max, total;
++};
++
++// Plot outputs, premultiplied BGRA8. Unrequested plots are NULL.
++struct mp_scope_result {
++    struct mp_scope_params params;
++    double pts;
++    const char *primaries, *transfer;
++    int analysis_w, analysis_h;
++    bool dolby_vision;
++    bool gpu;
++    uint8_t *plot[3]; // waveform (w*h), parade (w*h), vectorscope (h*h)
++};
++
++// Sets up params for a source with the given encoded color space. Fails for
++// signals the scopes cannot represent (unknown or non-PQ/HLG HDR transfers).
++bool mp_scope_params_init(struct mp_scope_params *sp, int w, int plots,
++                          const struct pl_color_space *color);
++
++void mp_scope_layout(const struct mp_scope_params *sp, struct mp_scope_layout *l);
++size_t mp_scope_plot_size(const struct mp_scope_params *sp, int plot);
++
++// Bins an encoded, full-range RGBA64 image that is displayed rotated
++// clockwise by `rotate` degrees (a multiple of 90). `bins` must be zeroed and
++// hold layout.total entries.
++void mp_scope_accumulate(const struct mp_scope_params *sp, uint32_t *bins,
++                         const uint16_t *rgba, int w, int h, ptrdiff_t stride,
++                         int rotate);
++
++// Fills the requested (non-NULL) zeroed plot buffers from accumulated bins.
++void mp_scope_paint(const struct mp_scope_params *sp, uint32_t *bins,
++                    uint8_t *plot[3]);
