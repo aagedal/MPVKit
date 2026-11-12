@@ -459,7 +459,7 @@ class BaseBuild {
         try? FileManager.default.removeItem(at: frameworkDir)
         try FileManager.default.createDirectory(at: frameworkDir, withIntermediateDirectories: true, attributes: nil)
         var arguments = ["-create"]
-        for arch in platform.architectures {
+        for arch in architectures(platform) {
             let prefix = thinDir(platform: platform, arch: arch)
             if !FileManager.default.fileExists(atPath: prefix.path) {
                 return nil
