@@ -1,0 +1,99 @@
+Subject: [PATCH] f_decoder_wrapper: thin overflowing backward video batches evenly
+
+When a batch (GOP) of decoded video does not fit into
+--video-reversal-buffer, the newest frames were discarded, so backward
+playback jumped over them. Keep every second (fourth, ...) frame of the
+batch instead, so long-GOP material plays backward continuously at a
+reduced frame rate within the configured memory.
+
+diff --git a/filters/f_decoder_wrapper.c b/filters/f_decoder_wrapper.c
+index 4a2a3e4..d50f8d8 100644
+--- a/filters/f_decoder_wrapper.c
++++ b/filters/f_decoder_wrapper.c
+@@ -208,6 +208,9 @@ struct priv {
+     struct mp_frame *reverse_queue;
+     int num_reverse_queue;
+     bool reverse_queue_complete;
++    // Video frames of the current batch seen, and the stride of those kept
++    // after the batch outgrew the reversal buffer.
++    int reverse_frames_seen, reverse_stride;
+ 
+     struct mp_frame decoded_coverart;
+     int coverart_returned; // 0: no, 1: coverart frame itself, 2: EOF returned
+@@ -354,6 +357,8 @@ static void decf_reset(struct mp_filter *f)
+     p->num_reverse_queue = 0;
+     p->reverse_queue_byte_size = 0;
+     p->reverse_queue_complete = false;
++    p->reverse_frames_seen = 0;
++    p->reverse_stride = 1;
+ 
+     reset_decoder(p);
+ }
+@@ -1042,6 +1047,24 @@ static void feed_packet(struct priv *p)
+     p->packets_without_output += 1;
+ }
+ 
++// Drop every other queued frame. The queue holds the batch's frames at
++// multiples of reverse_stride, so the survivors are at multiples of twice it.
++static void thin_reverse_queue(struct priv *p)
++{
++    int kept = 0;
++    p->reverse_queue_byte_size = 0;
++    for (int n = 0; n < p->num_reverse_queue; n++) {
++        if (n % 2) {
++            mp_frame_unref(&p->reverse_queue[n]);
++            continue;
++        }
++        p->reverse_queue_byte_size += mp_frame_approx_size(p->reverse_queue[n]);
++        p->reverse_queue[kept++] = p->reverse_queue[n];
++    }
++    p->num_reverse_queue = kept;
++    p->reverse_stride *= 2;
++}
++
+ static void enqueue_backward_frame(struct priv *p, struct mp_frame frame)
+ {
+     bool eof = frame.type == MP_FRAME_EOF;
+@@ -1055,6 +1078,25 @@ static void enqueue_backward_frame(struct priv *p, struct mp_frame frame)
+         case STREAM_AUDIO: queue_size = opts->audio_reverse_size; break;
+         }
+ 
++        // A video batch (GOP) that does not fit is played back at a reduced
++        // frame rate, spread evenly over the batch, instead of discarding
++        // its newest frames, which jumps over them.
++        if (p->header->type == STREAM_VIDEO) {
++            int index = p->reverse_frames_seen++;
++            if (p->reverse_queue_byte_size >= queue_size && p->num_reverse_queue > 1 &&
++                index % p->reverse_stride == 0)
++            {
++                while (p->reverse_queue_byte_size >= queue_size && p->num_reverse_queue > 1)
++                    thin_reverse_queue(p);
++                MP_VERBOSE(p, "Reversal queue full, keeping every %d. frame.\n",
++                           p->reverse_stride);
++            }
++            if (index % p->reverse_stride) {
++                mp_frame_unref(&frame);
++                return;
++            }
++        }
++
+         if (p->reverse_queue_byte_size >= queue_size) {
+             MP_ERR(p, "Reversal queue overflow, discarding frame.\n");
+             mp_frame_unref(&frame);
+@@ -1162,6 +1204,8 @@ static void read_frame(struct priv *p)
+ 
+         p->reverse_queue_byte_size = 0;
+         p->reverse_queue_complete = p->num_reverse_queue > 0;
++        p->reverse_frames_seen = 0;
++        p->reverse_stride = 1;
+ 
+         p->packet = MAKE_FRAME(MP_FRAME_PACKET, new_segment);
+         mp_filter_internal_mark_progress(p->decf);
+@@ -1380,6 +1424,7 @@ struct mp_decoder_wrapper *mp_decoder_wrapper_create(struct mp_filter *parent,
+     p->header = src;
+     p->codec = p->header->codec;
+     p->play_dir = 1;
++    p->reverse_stride = 1;
+     mp_filter_add_pin(public_f, MP_PIN_OUT, "out");
+ 
+     if (src->group && src->group->lavfi_graph) {
