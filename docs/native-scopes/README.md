@@ -52,7 +52,10 @@ Protocol 2 result: `protocol`, `w`, `h`, `track-id`, `pts`, `primaries` and
 `peak-nits`, `dolby-vision`, `backend` (`gpu`/`cpu`), `analysis-w`,
 `analysis-h`, `format="bgra-premultiplied"`, and a byte array per requested
 plot (`waveform`, `parade`, `vectorscope`). The command fails during pending
-seek/restart, stop or track replacement, and for unsupported signals.
+seek/restart, stop or track replacement, and for unsupported signals. `pts`
+is media time like `time-pos`, also during `play-direction=backward` (mpv
+negates frame timestamps internally there). Changing direction seeks, so
+requests fail until playback has settled again.
 
 Changes from protocol 1: plots and backend are selectable, color names follow
 mpv, `hardware-transfer` is gone (GPU frames are never transferred; CPU frames

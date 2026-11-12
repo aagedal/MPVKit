@@ -688,10 +688,10 @@ index 0000000..85f2db8
 +}
 diff --git a/player/scopes.c b/player/scopes.c
 new file mode 100644
-index 0000000..d7f1601
+index 0000000..e491d20
 --- /dev/null
 +++ b/player/scopes.c
-@@ -0,0 +1,175 @@
+@@ -0,0 +1,179 @@
 +// Copyright © 2026 Truls Aagedal
 +// SPDX-License-Identifier: GPL-3.0-or-later
 +//
@@ -839,6 +839,10 @@ index 0000000..d7f1601
 +        talloc_free(res);
 +        return;
 +    }
++    // Frame timestamps are negated during backward playback; report media
++    // time like time-pos. A direction change in between implies a seek, which
++    // playback_settled() rejects.
++    double pts = res->pts * mpctx->play_dir;
 +
 +    const struct mp_scope_params *sp = &res->params;
 +    struct mpv_node *node = &cmd->result;
@@ -847,7 +851,7 @@ index 0000000..d7f1601
 +    node_map_add_int64(node, "w", sp->w);
 +    node_map_add_int64(node, "h", sp->h);
 +    node_map_add_int64(node, "track-id", track_id);
-+    node_map_add_double(node, "pts", res->pts);
++    node_map_add_double(node, "pts", pts);
 +    node_map_add_string(node, "primaries", res->primaries);
 +    node_map_add_string(node, "transfer", res->transfer);
 +    node_map_add_double(node, "peak-nits", sp->peak);

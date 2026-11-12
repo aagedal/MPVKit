@@ -209,8 +209,19 @@ int main(int argc, char **argv) {
     if (mpv_command_ret(m, bad, &n) >= 0) return 9;
     mpv_free_node_contents(&n);
 
+    // SCOPE_BACKWARD plays with play-direction=backward from the middle; PTS
+    // must stay in media time and fall.
+    int backward = play && getenv("SCOPE_BACKWARD");
+    if (backward) {
+        const char *mid[] = {"seek", "2", "absolute+exact", NULL};
+        check(mpv_command(m, mid));
+        for (int i = 0; i < 100; i++) { pump(); mpv_wait_event(m, .01); }
+        // Changing direction seeks; scopes are refused until it settles.
+        check(mpv_set_property_string(m, "play-direction", "backward"));
+        for (int i = 0; i < 100; i++) { pump(); mpv_wait_event(m, .01); }
+    }
     if (play) check(mpv_set_property_string(m, "pause", "no"));
-    int iters = 30;
+    int iters = backward ? 8 : 30; // the fixture is short going backward
     double first = -1, last = -1;
     printf("\"timingMS\":{");
     for (int b = 0; b < 2; b++) {
@@ -236,7 +247,9 @@ int main(int argc, char **argv) {
     }
     printf("\"screenshotOnly\":%.4f},\"firstPTS\":%.9f,\"lastPTS\":%.9f,",
            shot / iters * 1000, first, last);
-    if (play && last <= first) return 10;
+    if (play && !backward && last <= first) return 10;
+    if (backward && (last >= first || last < 0)) return 13;
+    if (backward) check(mpv_set_property_string(m, "play-direction", "forward"));
 
     check(mpv_set_property_string(m, "pause", "yes"));
     const char *seek[] = {"seek", "1", "absolute+exact", NULL};
