@@ -148,3 +148,33 @@ Intel hardware and consumer app UI behavior are outside these dependency checks.
 reports and release hashes. The release source archive includes the exact
 staged FFmpeg/mpv sources, patched library-only recipe and compiler configuration.
 The isolated rebuild script reads version tags from the Swift recipe.
+
+## Timestamped meter history — 2026-11-12
+
+`aagedal-1.1.0-n9.0.2-history.1` (mpv 0.41, from a branch off `resize.1`)
+introduced two source patches. Since `aagedal-1.1.0-n9.0.2-mpv0.42.1` they are
+part of the main patch sequence for mpv 0.42.0, applied after 0001-0009.
+
+- `0010-af-lavfi-meter-history.patch` adds the `amc-meter-history` suboption
+  to the `lavfi` audio filter (off by default). With it, `af-metadata/<label>`
+  also returns `amc-meter-history-v1`: a JSON snapshot of up to 128 recent
+  output frames, each with its media start/end time, sample rate, sample count,
+  layout and that frame's filter metadata, plus instance, epoch, sequence,
+  eviction and rejection counters. A client shows each reading when its own
+  playback clock reaches the frame's end, instead of treating the latest tag set
+  as audible now (decoder output can be seconds ahead of the speaker).
+
+  ```text
+  af add @meter:lavfi=graph=[ebur128=metadata=1,astats=metadata=1:reset=1]:amc-meter-history=yes
+  ```
+
+  An unpatched libmpv rejects the suboption, so clients can probe support with
+  `mpv_set_option_string(handle, "af", "lavfi=graph=[anull]:amc-meter-history=yes")`
+  on an uninitialized handle.
+- `0011-ad-lavc-aac-discard-priming.patch` keeps the explicit skip of a
+  discarded AAC priming frame, so playback no longer drops another 1024 samples
+  (21.3 ms at 48 kHz) at the start of AAC files.
+
+The patches add no public mpv API. Validation lives with the consumer: Aagedal
+Media Converter `docs/AUDIO-METERING-PLAN.md`; its MPV preview tests (timestamp
+history, playback meter lifecycle, option probe) were re-run against mpv 0.42.
