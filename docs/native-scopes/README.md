@@ -65,6 +65,10 @@ consumer must check `protocol`, all node types and exact payload lengths.
 `aagedal-decoder-raster` (protocol 2, unchanged) still requires
 `--aagedal-decoder-raster=yes` and returns the paused decoder raster, with the
 properties `aagedal-decoder-raster-pts` and `aagedal-decoder-raster-version`.
+It also works when paused during backward playback; its `pts` is media time
+like `time-pos`. The cache sizes hardware frames with the shared
+`mp_image_approx_byte_size()` estimate (standard patch 0007, see
+[backward playback](../reverse-playback/README.md)).
 
 ## Build
 
@@ -155,7 +159,9 @@ python3 scripts/validate-native-scopes.py /path/to/scopes-client /tmp/scope-resu
 The scopes client takes `INPUT OUTPUT_PREFIX HWDEC WIDTH [play]`
 (`SCOPE_ANALYSIS` overrides the analysis edge); the raster client takes
 `INPUT OUTPUT HWDEC` and fails if requested hardware decoding falls back to
-software.
+software. With `SCOPE_BACKWARD=1` (scopes, with `play`) or `RASTER_BACKWARD=1`
+(raster) they also check backward playback: falling media-time PTS, and a
+paused backward raster byte-identical to the same frame reached forward.
 
 The [evidence-20261015](evidence-20261015/) directory documents the earlier mpv
 0.41.0 CPU-only candidate (protocol 1) and is kept for reference.

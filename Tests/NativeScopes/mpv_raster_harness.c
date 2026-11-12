@@ -66,6 +66,82 @@ static mpv_node *field(mpv_node *n, const char *key, mpv_format format) {
     exit(3);
 }
 
+// Waits until a decoder raster is available, then returns its tightly packed
+// pixels and media-time PTS. NULL on timeout or failure.
+static unsigned char *grab(mpv_handle *m, size_t *size, double *pts) {
+    for (int i = 0; i < 500; i++) {
+        double p;
+        if (mpv_get_property(m, "aagedal-decoder-raster-pts", MPV_FORMAT_DOUBLE, &p) >= 0) break;
+        pump();
+        mpv_wait_event(m, .01);
+    }
+    const char *cmd[] = {"aagedal-decoder-raster", NULL};
+    mpv_node n;
+    if (mpv_command_ret(m, cmd, &n) < 0) return NULL;
+    mpv_byte_array *ba = field(&n, "data", MPV_FORMAT_BYTE_ARRAY)->u.ba;
+    int64_t w = field(&n, "w", MPV_FORMAT_INT64)->u.int64;
+    int64_t h = field(&n, "h", MPV_FORMAT_INT64)->u.int64;
+    int64_t stride = field(&n, "stride", MPV_FORMAT_INT64)->u.int64;
+    int bpp = !strcmp(field(&n, "format", MPV_FORMAT_STRING)->u.string, "rgba64") ? 8 : 4;
+    *pts = field(&n, "pts", MPV_FORMAT_DOUBLE)->u.double_;
+    *size = w * h * bpp;
+    unsigned char *out = malloc(*size);
+    for (int64_t y = 0; y < h; y++)
+        memcpy(out + y * w * bpp, (char *)ba->data + y * stride, w * bpp);
+    mpv_free_node_contents(&n);
+    return out;
+}
+
+static void settle(mpv_handle *m, int ticks) {
+    for (int i = 0; i < ticks; i++) { pump(); mpv_wait_event(m, .01); }
+}
+
+// RASTER_BACKWARD: play backward from 2 s, pause, capture; the raster must
+// report media time (matching time-pos) and equal the same frame reached
+// forward by an exact seek. Returns 0 or an exit code.
+static int backward_check(mpv_handle *m) {
+    const char *mid[] = {"seek", "2", "absolute+exact", NULL};
+    check(mpv_command(m, mid));
+    settle(m, 50);
+    check(mpv_set_property_string(m, "play-direction", "backward"));
+    settle(m, 50);
+    check(mpv_set_property_string(m, "pause", "no"));
+    // Backward output starts after the GOP is decoded; play some of it.
+    double pos;
+    for (int i = 0; i < 500; i++) {
+        settle(m, 1);
+        if (mpv_get_property(m, "time-pos", MPV_FORMAT_DOUBLE, &pos) >= 0 && pos < 1.8)
+            break;
+    }
+    check(mpv_set_property_string(m, "pause", "yes"));
+    settle(m, 20);
+    size_t back_size, fwd_size;
+    double back_pts, fwd_pts;
+    unsigned char *back = grab(m, &back_size, &back_pts);
+    if (!back) return 20;
+    if (mpv_get_property(m, "time-pos", MPV_FORMAT_DOUBLE, &pos) < 0) return 21;
+    if (!(back_pts > 0 && back_pts < 2) || fabs(back_pts - pos) > 1e-3) {
+        fprintf(stderr, "backward raster pts %.6f, time-pos %.6f\n", back_pts, pos);
+        return 22;
+    }
+
+    check(mpv_set_property_string(m, "play-direction", "forward"));
+    settle(m, 50);
+    char target[64];
+    snprintf(target, sizeof(target), "%.9f", back_pts);
+    const char *seek[] = {"seek", target, "absolute+exact", NULL};
+    check(mpv_command(m, seek));
+    settle(m, 50);
+    unsigned char *fwd = grab(m, &fwd_size, &fwd_pts);
+    if (!fwd) return 23;
+    int same = back_size == fwd_size && !memcmp(back, fwd, back_size);
+    printf("\"backward\":{\"pts\":%.6f,\"timePos\":%.6f,\"forwardPTS\":%.6f,"
+           "\"identicalToForward\":%d},", back_pts, pos, fwd_pts, same);
+    free(back);
+    free(fwd);
+    return same && fabs(fwd_pts - back_pts) < 1e-6 ? 0 : 24;
+}
+
 int main(int argc, char **argv) {
     if (argc < 4) return 1;
     mpv_handle *m = mpv_create();
@@ -131,6 +207,10 @@ int main(int argc, char **argv) {
         check(mpv_command_ret(m, cmd, &n));
         total += now() - start;
         mpv_free_node_contents(&n);
+    }
+    if (getenv("RASTER_BACKWARD")) {
+        int err = backward_check(m);
+        if (err) return err;
     }
     // Unpaused playback revokes the raster.
     check(mpv_set_property_string(m, "pause", "no"));

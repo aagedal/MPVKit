@@ -60,7 +60,7 @@ index 18f274a..71c42ca 100644
      struct pl_color_space color; // colorspace info where available
      struct pl_color_repr repr;   // color representation info where available
 diff --git a/filters/f_decoder_wrapper.c b/filters/f_decoder_wrapper.c
-index 4a2a3e4..89f6fe3 100644
+index d50f8d8..99ac836 100644
 --- a/filters/f_decoder_wrapper.c
 +++ b/filters/f_decoder_wrapper.c
 @@ -17,6 +17,7 @@
@@ -71,23 +71,7 @@ index 4a2a3e4..89f6fe3 100644
  #include <stdlib.h>
  #include <stdbool.h>
  #include <math.h>
-@@ -24,6 +25,7 @@
- 
- #include <libavutil/buffer.h>
- #include <libavutil/common.h>
-+#include <libavutil/hwcontext.h>
- #include <libavutil/rational.h>
- 
- #include "options/options.h"
-@@ -44,6 +46,7 @@
- #include "audio/aframe.h"
- #include "video/out/vo.h"
- #include "video/csputils.h"
-+#include "video/mp_image_pool.h"
- 
- #include "demux/stheader.h"
- 
-@@ -98,6 +101,7 @@ struct dec_wrapper_opts {
+@@ -98,6 +99,7 @@ struct dec_wrapper_opts {
      int aspect_method;
      double fps_override;
      bool correct_pts;
@@ -95,7 +79,7 @@ index 4a2a3e4..89f6fe3 100644
      int video_rotate;
      char *audio_decoders;
      char *video_decoders;
-@@ -113,6 +117,7 @@ static int decoder_list_help(struct mp_log *log, const m_option_t *opt,
+@@ -113,6 +115,7 @@ static int decoder_list_help(struct mp_log *log, const m_option_t *opt,
  
  const struct m_sub_options dec_wrapper_conf = {
      .opts = (const struct m_option[]){
@@ -103,7 +87,7 @@ index 4a2a3e4..89f6fe3 100644
          {"correct-pts", OPT_BOOL(correct_pts)},
          {"container-fps-override", OPT_DOUBLE(fps_override), M_RANGE(0, DBL_MAX)},
          {"ad", OPT_STRING(audio_decoders),
-@@ -196,6 +201,13 @@ struct priv {
+@@ -196,6 +199,13 @@ struct priv {
  
      struct mp_image_params dec_format, last_format, fixed_format;
  
@@ -117,7 +101,7 @@ index 4a2a3e4..89f6fe3 100644
      double fps;
  
      double start_pts;
-@@ -341,6 +353,9 @@ static void decf_reset(struct mp_filter *f)
+@@ -344,6 +354,9 @@ static void decf_reset(struct mp_filter *f)
      p->last_format = p->fixed_format = (struct mp_image_params){0};
  
      mp_mutex_lock(&p->cache_lock);
@@ -127,7 +111,7 @@ index 4a2a3e4..89f6fe3 100644
      p->pts_reset = false;
      p->attempt_framedrops = 0;
      p->dropped_frames = 0;
-@@ -711,6 +726,12 @@ static void fix_image_params(struct priv *p,
+@@ -716,6 +729,12 @@ static void fix_image_params(struct priv *p,
          m.rotate = (m.rotate + opts->video_rotate) % 360;
      }
  
@@ -140,7 +124,7 @@ index 4a2a3e4..89f6fe3 100644
      pl_color_space_merge(&m.color, &c->color);
      pl_color_repr_merge(&m.repr, &c->repr);
  
-@@ -909,6 +930,91 @@ static void correct_audio_pts(struct priv *p, struct mp_aframe *aframe)
+@@ -914,6 +933,86 @@ static void correct_audio_pts(struct priv *p, struct mp_aframe *aframe)
          p->pts += frame_len;
  }
  
@@ -151,6 +135,8 @@ index 4a2a3e4..89f6fe3 100644
 +
 +// Whether decoder output of this size is presented without crop, scaling or
 +// timing reinterpretation, so that a cached raster is the presented frame.
++// Backward playback qualifies: frames leave the reversal queue with negated,
++// strictly increasing timestamps, the same time base as the core's video_pts.
 +static bool raster_allowed(struct priv *p, int w, int h)
 +{
 +    const struct dec_wrapper_opts *o = p->opts;
@@ -160,24 +146,17 @@ index 4a2a3e4..89f6fe3 100644
 +        f->p_w > 0 && f->p_w == f->p_h &&
 +        f->crop.x0 == 0 && f->crop.y0 == 0 && f->crop.x1 == w && f->crop.y1 == h &&
 +        o->video_rotate == 0 && o->movie_aspect == -2 && o->aspect_method == 2 &&
-+        o->correct_pts && o->fps_override == 0 && p->play_dir == 1 &&
++        o->correct_pts && o->fps_override == 0 &&
 +        w > 0 && h > 0 && w <= RASTER_MAX_DIM && h <= RASTER_MAX_DIM &&
 +        (int64_t)w * h <= RASTER_MAX_PIXELS;
 +}
 +
-+// Memory a raster would take once in system memory, or -1 if unknown.
++// Memory a raster takes, including hardware surfaces, or -1 if unknown.
 +static int raster_size(struct mp_image *mpi)
 +{
-+    if (!IMGFMT_IS_HWACCEL(mpi->imgfmt))
-+        return mp_image_approx_byte_size(mpi);
-+    if (!mpi->hwctx)
++    if (IMGFMT_IS_HWACCEL(mpi->imgfmt) && !mpi->hwctx)
 +        return -1;
-+    AVHWFramesContext *ctx = (void *)mpi->hwctx->data;
-+    int format = mp_image_hw_download_get_sw_format(mpi);
-+    if (!format || ctx->width <= 0 || ctx->height <= 0 ||
-+        ctx->width > RASTER_MAX_DIM || ctx->height > RASTER_MAX_DIM)
-+        return -1;
-+    return mp_image_get_alloc_size(format, ctx->width, ctx->height, 64);
++    return mp_image_approx_byte_size(mpi);
 +}
 +
 +// Exact PTS association is only safe while decoder output is strictly
@@ -232,7 +211,7 @@ index 4a2a3e4..89f6fe3 100644
  static void process_output_frame(struct priv *p, struct mp_frame frame)
  {
      if (frame.type == MP_FRAME_VIDEO) {
-@@ -916,11 +1022,17 @@ static void process_output_frame(struct priv *p, struct mp_frame frame)
+@@ -921,11 +1020,17 @@ static void process_output_frame(struct priv *p, struct mp_frame frame)
  
          correct_video_pts(p, mpi);
  
@@ -250,7 +229,7 @@ index 4a2a3e4..89f6fe3 100644
          mpi->params = p->fixed_format;
          mpi->nominal_fps = p->fps;
      } else if (frame.type == MP_FRAME_AUDIO) {
-@@ -1258,6 +1370,8 @@ static void public_f_destroy(struct mp_filter *f)
+@@ -1302,6 +1407,8 @@ static void public_f_destroy(struct mp_filter *f)
  
      talloc_free(p->dec_root_filter);
      talloc_free(p->queue);
@@ -259,7 +238,7 @@ index 4a2a3e4..89f6fe3 100644
      mp_mutex_destroy(&p->cache_lock);
  }
  
-@@ -1527,3 +1641,29 @@ void lavc_process(struct mp_filter *f, struct lavc_state *state,
+@@ -1572,3 +1679,29 @@ void lavc_process(struct mp_filter *f, struct lavc_state *state,
          mp_filter_internal_mark_progress(f);
      }
  }
@@ -389,10 +368,10 @@ index 981fe47..d1a52b9 100644
              {"flags", OPT_CHOICE(v.i,
 diff --git a/player/decoder_raster.c b/player/decoder_raster.c
 new file mode 100644
-index 0000000..85f2db8
+index 0000000..38c4d2b
 --- /dev/null
 +++ b/player/decoder_raster.c
-@@ -0,0 +1,293 @@
+@@ -0,0 +1,300 @@
 +// Copyright © 2026 Truls Aagedal
 +// SPDX-License-Identifier: GPL-3.0-or-later
 +//
@@ -467,7 +446,7 @@ index 0000000..85f2db8
 +        mpctx->seek.type || mpctx->hrseek_active || !mpctx->paused ||
 +        !track || !track->dec || opts->filter_opts->deinterlace != 0 ||
 +        opts->vo->video_crop.xy_valid || opts->vo->video_crop.wh_valid ||
-+        !isfinite(mpctx->video_pts) || mpctx->video_pts < 0 ||
++        !isfinite(mpctx->video_pts) || mpctx->video_pts * mpctx->play_dir < 0 ||
 +        (opts->vf_settings && opts->vf_settings[0].name))
 +        return NULL;
 +
@@ -488,10 +467,17 @@ index 0000000..85f2db8
 +    return src;
 +}
 +
++// Raster timestamps are in the core's time base, negated during backward
++// playback; consumers get media time like time-pos.
++static double media_time(struct MPContext *mpctx, double pts)
++{
++    return pts * mpctx->play_dir;
++}
++
 +double aagedal_decoder_raster_pts(struct MPContext *mpctx)
 +{
 +    struct mp_image *src = source_raster(mpctx);
-+    double pts = src ? src->pts : NAN;
++    double pts = src ? media_time(mpctx, src->pts) : NAN;
 +    talloc_free(src);
 +    return pts;
 +}
@@ -669,7 +655,7 @@ index 0000000..85f2db8
 +    node_map_add_int64(res, "rotation", rotation);
 +    node_map_add_int64(res, "track-id", track->user_tid);
 +    node_map_add_int64(res, "source-bit-depth", source_depth);
-+    node_map_add_double(res, "pts", src->pts);
++    node_map_add_double(res, "pts", media_time(mpctx, src->pts));
 +    node_map_add_flag(res, "mirrored", mirrored);
 +    node_map_add_flag(res, "hardware-transfer", hardware);
 +    node_map_add_flag(res, "pixel-preserving", true);
@@ -886,10 +872,10 @@ index 97abc79..458eed8 100644
 +
  #endif /* MPLAYER_SCREENSHOT_H */
 diff --git a/video/mp_image.c b/video/mp_image.c
-index a90c127..26d4a36 100644
+index fef76d6..e5e3386 100644
 --- a/video/mp_image.c
 +++ b/video/mp_image.c
-@@ -556,6 +556,8 @@ void mp_image_copy_attributes(struct mp_image *dst, struct mp_image *src)
+@@ -568,6 +568,8 @@ void mp_image_copy_attributes(struct mp_image *dst, struct mp_image *src)
      dst->pkt_duration = src->pkt_duration;
      dst->params.vflip = src->params.vflip;
      dst->params.rotate = src->params.rotate;
@@ -898,7 +884,7 @@ index a90c127..26d4a36 100644
      dst->params.stereo3d = src->params.stereo3d;
      dst->params.p_w = src->params.p_w;
      dst->params.p_h = src->params.p_h;
-@@ -892,6 +894,8 @@ bool mp_image_params_equal(const struct mp_image_params *p1,
+@@ -904,6 +906,8 @@ bool mp_image_params_equal(const struct mp_image_params *p1,
             p1->chroma_location == p2->chroma_location &&
             p1->vflip == p2->vflip &&
             p1->rotate == p2->rotate &&
@@ -907,7 +893,7 @@ index a90c127..26d4a36 100644
             p1->stereo3d == p2->stereo3d &&
             mp_rect_equals(&p1->crop, &p2->crop);
  }
-@@ -1175,6 +1179,9 @@ struct mp_image *mp_image_from_av_frame(struct AVFrame *src)
+@@ -1187,6 +1191,9 @@ struct mp_image *mp_image_from_av_frame(struct AVFrame *src)
      sd = av_frame_get_side_data(src, AV_FRAME_DATA_DISPLAYMATRIX);
      if (sd) {
          int32_t *matrix = (int32_t *) sd->data;
