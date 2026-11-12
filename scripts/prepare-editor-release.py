@@ -71,7 +71,7 @@ def package_sources(root, build, x264, provenance, archive):
         subprocess.run(['tar', '-x', '-C', str(tree)], stdin=exported.stdout, check=True)
         exported.stdout.close()
         assert exported.wait() == 0
-        for source in [build / 'dist/FFmpeg-n9.0.2', build / 'dist/libmpv-v0.41.0', x264]:
+        for source in [build / 'dist/FFmpeg-n9.0.2', build / 'dist/libmpv-v0.42.0', x264]:
             shutil.copytree(source, tree / 'dist' / source.name, ignore=shutil.ignore_patterns('.git'))
         shutil.copytree(provenance, tree / 'provenance')
         with tarfile.open(archive, 'w:gz') as package:
